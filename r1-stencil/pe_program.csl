@@ -4,24 +4,24 @@ param steps: i16;
 
 param send_e_col: color;
 param send_w_col: color;
-param send_n_col: color;
-param send_s_col: color;
+// param send_n_col: color;
+// param send_s_col: color;
 
 param recv_e_col: color;
 param recv_w_col: color;
-param recv_n_col: color;
-param recv_s_col: color;
+// param recv_n_col: color;
+// param recv_s_col: color;
 
 // Queue IDs
 const send_color_oq_e = @get_output_queue(2);  // 0 is reserved
 const send_color_oq_w = @get_output_queue(1);
-const send_color_oq_n = @get_output_queue(3);
-const send_color_oq_s = @get_output_queue(4);
+// const send_color_oq_n = @get_output_queue(3);
+// const send_color_oq_s = @get_output_queue(4);
 
 const recv_color_iq_e = @get_input_queue(3);  // 0 and 1 are reserved
 const recv_color_iq_w = @get_input_queue(2);
-const recv_color_iq_n = @get_input_queue(4);
-const recv_color_iq_s = @get_input_queue(5);
+// const recv_color_iq_n = @get_input_queue(4);
+// const recv_color_iq_s = @get_input_queue(5);
 
 // Task ID used by a local task to unblock cmd stream
 const exit_task_id: local_task_id = @get_local_task_id(9);
@@ -42,13 +42,13 @@ const matrix_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> matrix[0] }
 
 const send_dsd_e = @get_dsd(fabout_dsd, .{ .fabric_color = send_e_col, .extent = 1, .output_queue = send_color_oq_e});
 const send_dsd_w = @get_dsd(fabout_dsd, .{ .fabric_color = send_w_col, .extent = 1, .output_queue = send_color_oq_w});
-const send_dsd_n = @get_dsd(fabout_dsd, .{ .fabric_color = send_n_col, .extent = 1, .output_queue = send_color_oq_n});
-const send_dsd_s = @get_dsd(fabout_dsd, .{ .fabric_color = send_s_col, .extent = 1, .output_queue = send_color_oq_s});
+// const send_dsd_n = @get_dsd(fabout_dsd, .{ .fabric_color = send_n_col, .extent = 1, .output_queue = send_color_oq_n});
+// const send_dsd_s = @get_dsd(fabout_dsd, .{ .fabric_color = send_s_col, .extent = 1, .output_queue = send_color_oq_s});
 
 const recv_dsd_e = @get_dsd(fabin_dsd, .{ .fabric_color = recv_e_col, .extent = 1, .input_queue = recv_color_iq_e});
 const recv_dsd_w = @get_dsd(fabin_dsd, .{ .fabric_color = recv_w_col, .extent = 1, .input_queue = recv_color_iq_w});
-const recv_dsd_n = @get_dsd(fabin_dsd, .{ .fabric_color = recv_n_col, .extent = 1, .input_queue = recv_color_iq_n});
-const recv_dsd_s = @get_dsd(fabin_dsd, .{ .fabric_color = recv_s_col, .extent = 1, .input_queue = recv_color_iq_s});
+// const recv_dsd_n = @get_dsd(fabin_dsd, .{ .fabric_color = recv_n_col, .extent = 1, .input_queue = recv_color_iq_n});
+// const recv_dsd_s = @get_dsd(fabin_dsd, .{ .fabric_color = recv_s_col, .extent = 1, .input_queue = recv_color_iq_s});
 
 // function that initializes weights
 // divide weights to not have to divide in the loop
@@ -85,8 +85,8 @@ fn step(exit: bool) void {
   // // synchroneous version
   @fmacs(matrix_dsd, matrix_dsd, recv_dsd_e, weights[1]);
   @fmacs(matrix_dsd, matrix_dsd, recv_dsd_w, weights[1]);
-  @fmacs(matrix_dsd, matrix_dsd, recv_dsd_n, weights[1]);
-  @fmacs(matrix_dsd, matrix_dsd, recv_dsd_s, weights[1]);
+  // @fmacs(matrix_dsd, matrix_dsd, recv_dsd_n, weights[1]);
+  // @fmacs(matrix_dsd, matrix_dsd, recv_dsd_s, weights[1]);
   if (exit) {
     @activate(exit_task_id);
   } else {
@@ -105,8 +105,8 @@ fn step(exit: bool) void {
 fn send_to_neighbors() void {
   @fmovs(send_dsd_e, matrix_dsd);
   @fmovs(send_dsd_w, matrix_dsd);
-  @fmovs(send_dsd_n, matrix_dsd);
-  @fmovs(send_dsd_s, matrix_dsd);
+  // @fmovs(send_dsd_n, matrix_dsd);
+  // @fmovs(send_dsd_s, matrix_dsd);
 }
 
 // Call gemv function and send/ receive partial result y
@@ -133,13 +133,13 @@ comptime {
   if (@is_arch("wse3")) {
     @initialize_queue(send_color_oq_e, .{ .color = send_color_oq_e });
     @initialize_queue(send_color_oq_w, .{ .color = send_color_oq_w });
-    @initialize_queue(send_color_oq_n, .{ .color = send_color_oq_n });
-    @initialize_queue(send_color_oq_s, .{ .color = send_color_oq_s });
+    // @initialize_queue(send_color_oq_n, .{ .color = send_color_oq_n });
+    // @initialize_queue(send_color_oq_s, .{ .color = send_color_oq_s });
 
     @initialize_queue(recv_color_iq_e, .{ .color = recv_color_iq_e });
     @initialize_queue(recv_color_iq_w, .{ .color = recv_color_iq_w });
-    @initialize_queue(recv_color_iq_n, .{ .color = recv_color_iq_n });
-    @initialize_queue(recv_color_iq_s, .{ .color = recv_color_iq_s });
+    // @initialize_queue(recv_color_iq_n, .{ .color = recv_color_iq_n });
+    // @initialize_queue(recv_color_iq_s, .{ .color = recv_color_iq_s });
   }
   @export_symbol(matrix_ptr, "matrix");
   @export_symbol(compute);
