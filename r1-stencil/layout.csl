@@ -17,7 +17,6 @@ const recv_n_col: color = @get_color(4); // Color used to receive data from the 
 const recv_s_col: color = @get_color(6); // Color used to receive data from the bottom
 
 
-// This example only uses 2 PEs
 const memcpy = @import_module("<memcpy/get_params>", .{
   .width = w,
   .height = h,
@@ -72,15 +71,15 @@ layout {
           .steps = steps,
         });
 
-        @set_color_config(col, row, recv_e_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
-        @set_color_config(col, row, recv_w_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
-        @set_color_config(col, row, recv_n_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{NORTH} }});
-        @set_color_config(col, row, recv_s_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{SOUTH} }});
-
         @set_color_config(col, row, send_e_col, .{.routes = .{ .rx = .{EAST}, .tx = .{RAMP} }});
         @set_color_config(col, row, send_w_col, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
         @set_color_config(col, row, send_n_col, .{.routes = .{ .rx = .{NORTH}, .tx = .{RAMP} }});
         @set_color_config(col, row, send_s_col, .{.routes = .{ .rx = .{SOUTH}, .tx = .{RAMP} }});
+
+        @set_color_config(col, row, recv_e_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
+        @set_color_config(col, row, recv_w_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
+        @set_color_config(col, row, recv_n_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{NORTH} }});
+        @set_color_config(col, row, recv_s_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{SOUTH} }});
       }
     }
   }

@@ -1,0 +1,19 @@
+var matrix: [1]f32 = [1]f32 {0.0};
+var weights = [1]f32 {1.0};
+const matrix_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> matrix[0] });
+const weights_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> weights[0] });
+
+const recv_e_col: color = @get_color(0);
+const recv_color_iq_e = @get_input_queue(3);
+const recv_dsd_e = @get_dsd(fabin_dsd, .{ .fabric_color = recv_e_col, .extent = 1, .input_queue = recv_color_iq_e});
+
+fn compute() void {
+  @fmachs(matrix_dsd, matrix_dsd, recv_dsd_e, 1.0, .{ .async = true });
+}
+
+comptime {
+  if (@is_arch("wse3")) {
+    @initialize_queue(recv_color_iq_e, .{ .color = recv_e_col });
+  }
+  @export_symbol(compute);
+}
