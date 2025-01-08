@@ -60,24 +60,24 @@ layout {
           @set_tile_code(col, row, "pe_program.csl", .{
           .memcpy_params = memcpy.get_params(col),
           .is_static_region = is_static_region,
-          .send_e_col = recv_e_col,
+          .send_e_col = recv_w_col,
           // .send_w_col = recv_w_col,
           // .send_n_col = recv_n_col,
           // .send_s_col = recv_s_col,
           // .recv_e_col = send_e_col,
-          .recv_w_col = send_w_col,
+          .recv_w_col = send_e_col,
           // .recv_n_col = send_n_col,
           // .recv_s_col = send_s_col,
           .steps = steps,
         });
 
-        @set_color_config(col, row, send_e_col, .{.routes = .{ .rx = .{EAST}, .tx = .{RAMP} }});
+        @set_color_config(col, row, send_e_col, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
         // @set_color_config(col, row, send_w_col, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
         // @set_color_config(col, row, send_n_col, .{.routes = .{ .rx = .{NORTH}, .tx = .{RAMP} }});
         // @set_color_config(col, row, send_s_col, .{.routes = .{ .rx = .{SOUTH}, .tx = .{RAMP} }});
 
         // @set_color_config(col, row, recv_e_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
-        @set_color_config(col, row, recv_w_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
+        @set_color_config(col, row, recv_w_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
         // @set_color_config(col, row, recv_n_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{NORTH} }});
         // @set_color_config(col, row, recv_s_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{SOUTH} }});
       }
