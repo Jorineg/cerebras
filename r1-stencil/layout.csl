@@ -11,8 +11,8 @@ const send_e_col: color = @get_color(1); // Color used to send data to the right
 // const send_n_col: color = @get_color(5); // Color used to send data to the top
 // const send_s_col: color = @get_color(7); // Color used to send data to the bottom
 
-const recv_e_col: color = @get_color(0); // Color used to receive data from the right
-// const recv_w_col: color = @get_color(2); // Color used to receive data from the left
+// const recv_e_col: color = @get_color(0); // Color used to receive data from the right
+const recv_w_col: color = @get_color(2); // Color used to receive data from the left
 // const recv_n_col: color = @get_color(4); // Color used to receive data from the top
 // const recv_s_col: color = @get_color(6); // Color used to receive data from the bottom
 
@@ -40,8 +40,8 @@ layout {
           // .send_w_col = send_w_col,
           // .send_n_col = send_n_col,
           // .send_s_col = send_s_col,
-          .recv_e_col = recv_e_col,
-          // .recv_w_col = recv_w_col,
+          // .recv_e_col = recv_e_col,
+          .recv_w_col = recv_w_col,
           // .recv_n_col = recv_n_col,
           // .recv_s_col = recv_s_col,
           .steps = steps,
@@ -52,8 +52,8 @@ layout {
         // @set_color_config(col, row, send_n_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{NORTH} }});
         // @set_color_config(col, row, send_s_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{SOUTH} }});
 
-        @set_color_config(col, row, recv_e_col, .{.routes = .{ .rx = .{EAST}, .tx = .{RAMP} }});
-        // @set_color_config(col, row, recv_w_col, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
+        // @set_color_config(col, row, recv_e_col, .{.routes = .{ .rx = .{EAST}, .tx = .{RAMP} }});
+        @set_color_config(col, row, recv_w_col, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
         // @set_color_config(col, row, recv_n_col, .{.routes = .{ .rx = .{NORTH}, .tx = .{RAMP} }});
         // @set_color_config(col, row, recv_s_col, .{.routes = .{ .rx = .{SOUTH}, .tx = .{RAMP} }});
       }else{
@@ -64,8 +64,8 @@ layout {
           // .send_w_col = recv_w_col,
           // .send_n_col = recv_n_col,
           // .send_s_col = recv_s_col,
-          .recv_e_col = send_e_col,
-          // .recv_w_col = send_w_col,
+          // .recv_e_col = send_e_col,
+          .recv_w_col = send_w_col,
           // .recv_n_col = send_n_col,
           // .recv_s_col = send_s_col,
           .steps = steps,
@@ -76,8 +76,8 @@ layout {
         // @set_color_config(col, row, send_n_col, .{.routes = .{ .rx = .{NORTH}, .tx = .{RAMP} }});
         // @set_color_config(col, row, send_s_col, .{.routes = .{ .rx = .{SOUTH}, .tx = .{RAMP} }});
 
-        @set_color_config(col, row, recv_e_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
-        // @set_color_config(col, row, recv_w_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
+        // @set_color_config(col, row, recv_e_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
+        @set_color_config(col, row, recv_w_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
         // @set_color_config(col, row, recv_n_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{NORTH} }});
         // @set_color_config(col, row, recv_s_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{SOUTH} }});
       }
