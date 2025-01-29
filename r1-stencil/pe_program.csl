@@ -32,6 +32,7 @@ const sys_mod = @import_module("<memcpy/memcpy>", memcpy_params);
 
 const rank: i16 = 1;
 var weights = [rank+1]f32 {1.0, 0.5};
+const zero: [1]f32 = [1]f32 {0.0};
 
 var matrix: [1]f32 = [1]f32 {0.0};
 var matrix_ptr: [*]f32 = &matrix;
@@ -39,6 +40,7 @@ var matrix_ptr: [*]f32 = &matrix;
 // DSDs for accessing weights and matrix
 const weights_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{rank+1} -> weights[i+1] });
 const matrix_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> matrix[0] });
+const zero_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> zero[0] });
 
 const send_dsd_e = @get_dsd(fabout_dsd, .{ .fabric_color = send_e_col, .extent = 1, .output_queue = send_color_oq_e});
 const send_dsd_w = @get_dsd(fabout_dsd, .{ .fabric_color = send_w_col, .extent = 1, .output_queue = send_color_oq_w});
@@ -80,7 +82,7 @@ fn step(exit: bool) void {
   // add own value to result
 
   // @fmacs(matrix_dsd, matrix_dsd, matrix_dsd, weights[0], .{ .async = true });
-  @fmacs(matrix_dsd, matrix_dsd, matrix_dsd, weights[0]);
+  @fmacs(matrix_dsd, zero_dsd, matrix_dsd, weights[0]);
 
   // // synchroneous version
   @fmacs(matrix_dsd, matrix_dsd, recv_dsd_e, weights[1]);
@@ -114,6 +116,7 @@ fn compute() void {
   init_weights();
   send_to_neighbors();
   if (is_static_region) {
+    @activate(exit_task_id);
     return;
   }
   for (@range(i16, steps)) |i| {
