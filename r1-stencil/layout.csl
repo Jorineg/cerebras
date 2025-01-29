@@ -6,15 +6,14 @@ param steps: i16;
 const rank: i16 = 1;
 
 // Colors
-const send_e_col: color = @get_color(1); // Color used to send data to the right
-const send_w_col: color = @get_color(3); // Color used to send data to the left
-const send_n_col: color = @get_color(5); // Color used to send data to the top
-const send_s_col: color = @get_color(7); // Color used to send data to the bottom
-
-const recv_e_col: color = @get_color(0); // Color used to receive data from the right
-const recv_w_col: color = @get_color(2); // Color used to receive data from the left
-const recv_n_col: color = @get_color(4); // Color used to receive data from the top
-const recv_s_col: color = @get_color(6); // Color used to receive data from the bottom
+const e_to_w_col_1: color = @get_color(1);
+const e_to_w_col_2: color = @get_color(2);
+const w_to_e_col_1: color = @get_color(3);
+const w_to_e_col_2: color = @get_color(4);
+const n_to_s_col_1: color = @get_color(5);
+const n_to_s_col_2: color = @get_color(6);
+const s_to_n_col_1: color = @get_color(7);
+const s_to_n_col_2: color = @get_color(8);
 
 
 const memcpy = @import_module("<memcpy/get_params>", .{
@@ -31,55 +30,57 @@ layout {
 
       const is_static_region: bool = col<rank or row<rank or col>=w-rank or row>=h-rank;
 
-      // vertical stripes pattern
-      if(col%2 == 0){
+      // checkerboard pattern
+      if(col%2 == row%2){
         @set_tile_code(col, row, "pe_program.csl", .{
           .memcpy_params = memcpy.get_params(col),
           .is_static_region = is_static_region,
-          .send_e_col = send_e_col,
-          // .send_w_col = send_w_col,
-          // .send_n_col = send_n_col,
-          // .send_s_col = send_s_col,
-          // .recv_e_col = recv_e_col,
-          .recv_w_col = recv_w_col,
-          // .recv_n_col = recv_n_col,
-          // .recv_s_col = recv_s_col,
+          .send_e_col = w_to_e_col_2,
+          .send_w_col = e_to_w_col_2,
+          .send_n_col = s_to_n_col_2,
+          .send_s_col = n_to_s_col_2,
+          .recv_e_col = e_to_w_col_1,
+          .recv_w_col = w_to_e_col_1,
+          .recv_n_col = n_to_s_col_1,
+          .recv_s_col = s_to_n_col_1,
           .steps = steps,
         });
 
-        @set_color_config(col, row, send_e_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
-        // @set_color_config(col, row, send_w_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
-        // @set_color_config(col, row, send_n_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{NORTH} }});
-        // @set_color_config(col, row, send_s_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{SOUTH} }});
+        @set_color_config(col, row, e_to_w_col_1, .{.routes = .{ .rx = .{EAST}, .tx = .{RAMP} }});
+        @set_color_config(col, row, w_to_e_col_1, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
+        @set_color_config(col, row, n_to_s_col_1, .{.routes = .{ .rx = .{NORTH}, .tx = .{RAMP} }});
+        @set_color_config(col, row, s_to_n_col_1, .{.routes = .{ .rx = .{SOUTH}, .tx = .{RAMP} }});
 
-        // @set_color_config(col, row, recv_e_col, .{.routes = .{ .rx = .{EAST}, .tx = .{RAMP} }});
-        @set_color_config(col, row, recv_w_col, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
-        // @set_color_config(col, row, recv_n_col, .{.routes = .{ .rx = .{NORTH}, .tx = .{RAMP} }});
-        // @set_color_config(col, row, recv_s_col, .{.routes = .{ .rx = .{SOUTH}, .tx = .{RAMP} }});
+        @set_color_config(col, row, e_to_w_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
+        @set_color_config(col, row, w_to_e_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
+        @set_color_config(col, row, n_to_s_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{SOUTH} }});
+        @set_color_config(col, row, s_to_n_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{NORTH} }});
+
       }else{
           @set_tile_code(col, row, "pe_program.csl", .{
           .memcpy_params = memcpy.get_params(col),
           .is_static_region = is_static_region,
-          .send_e_col = recv_w_col,
-          // .send_w_col = recv_w_col,
-          // .send_n_col = recv_n_col,
-          // .send_s_col = recv_s_col,
-          // .recv_e_col = send_e_col,
-          .recv_w_col = send_e_col,
-          // .recv_n_col = send_n_col,
-          // .recv_s_col = send_s_col,
+          .send_e_col = w_to_e_col_1,
+          .send_w_col = e_to_w_col_1,
+          .send_n_col = s_to_n_col_1,
+          .send_s_col = n_to_s_col_1,
+          .recv_e_col = e_to_w_col_2,
+          .recv_w_col = w_to_e_col_2,
+          .recv_n_col = n_to_s_col_2,
+          .recv_s_col = s_to_n_col_2,
           .steps = steps,
         });
 
-        @set_color_config(col, row, send_e_col, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
-        // @set_color_config(col, row, send_w_col, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
-        // @set_color_config(col, row, send_n_col, .{.routes = .{ .rx = .{NORTH}, .tx = .{RAMP} }});
-        // @set_color_config(col, row, send_s_col, .{.routes = .{ .rx = .{SOUTH}, .tx = .{RAMP} }});
+        @set_color_config(col, row, e_to_w_col_1, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
+        @set_color_config(col, row, w_to_e_col_1, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
+        @set_color_config(col, row, n_to_s_col_1, .{.routes = .{ .rx = .{RAMP}, .tx = .{SOUTH} }});
+        @set_color_config(col, row, s_to_n_col_1, .{.routes = .{ .rx = .{RAMP}, .tx = .{NORTH} }});
 
-        // @set_color_config(col, row, recv_e_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
-        @set_color_config(col, row, recv_w_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
-        // @set_color_config(col, row, recv_n_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{NORTH} }});
-        // @set_color_config(col, row, recv_s_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{SOUTH} }});
+        @set_color_config(col, row, e_to_w_col_2, .{.routes = .{ .rx = .{EAST}, .tx = .{RAMP} }});
+        @set_color_config(col, row, w_to_e_col_2, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
+        @set_color_config(col, row, n_to_s_col_2, .{.routes = .{ .rx = .{NORTH}, .tx = .{RAMP} }});
+        @set_color_config(col, row, s_to_n_col_2, .{.routes = .{ .rx = .{SOUTH}, .tx = .{RAMP} }});
+
       }
     }
   }
