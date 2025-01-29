@@ -44,6 +44,10 @@ layout {
           .recv_n_col = n_to_s_col_1,
           .recv_s_col = s_to_n_col_1,
           .steps = steps,
+          .row = row,
+          .col = col,
+          .width = w,
+          .height = h,
         });
 
         @set_color_config(col, row, e_to_w_col_1, .{.routes = .{ .rx = .{EAST}, .tx = .{RAMP} }});
@@ -69,6 +73,10 @@ layout {
           .recv_n_col = n_to_s_col_2,
           .recv_s_col = s_to_n_col_2,
           .steps = steps,
+          .row = row,
+          .col = col,
+          .width = w,
+          .height = h,
         });
 
         @set_color_config(col, row, e_to_w_col_1, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
