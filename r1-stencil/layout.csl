@@ -7,14 +7,14 @@ const rank: i16 = 1;
 
 // Colors
 const send_e_col: color = @get_color(1); // Color used to send data to the right
-// const send_w_col: color = @get_color(3); // Color used to send data to the left
-// const send_n_col: color = @get_color(5); // Color used to send data to the top
-// const send_s_col: color = @get_color(7); // Color used to send data to the bottom
+const send_w_col: color = @get_color(3); // Color used to send data to the left
+const send_n_col: color = @get_color(5); // Color used to send data to the top
+const send_s_col: color = @get_color(7); // Color used to send data to the bottom
 
-// const recv_e_col: color = @get_color(0); // Color used to receive data from the right
+const recv_e_col: color = @get_color(0); // Color used to receive data from the right
 const recv_w_col: color = @get_color(2); // Color used to receive data from the left
-// const recv_n_col: color = @get_color(4); // Color used to receive data from the top
-// const recv_s_col: color = @get_color(6); // Color used to receive data from the bottom
+const recv_n_col: color = @get_color(4); // Color used to receive data from the top
+const recv_s_col: color = @get_color(6); // Color used to receive data from the bottom
 
 
 const memcpy = @import_module("<memcpy/get_params>", .{
