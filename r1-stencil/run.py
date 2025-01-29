@@ -66,7 +66,7 @@ runner.memcpy_h2d(
     height,
     1,
     streaming=False,
-    order=MemcpyOrder.ROW_MAJOR,
+    order=MemcpyOrder.COL_MAJOR,
     data_type=MemcpyDataType.MEMCPY_32BIT,
     nonblock=False,
 )
@@ -89,7 +89,7 @@ runner.memcpy_d2h(
     height,
     1,
     streaming=False,
-    order=MemcpyOrder.ROW_MAJOR,
+    order=MemcpyOrder.COL_MAJOR,
     data_type=MemcpyDataType.MEMCPY_32BIT,
     nonblock=False,
 )
