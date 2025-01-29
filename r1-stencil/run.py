@@ -32,7 +32,7 @@ num_steps = int(compile_data["params"]["steps"])
 print(f"Using matrix of size {width}x{height} for {num_steps} steps")
 
 # Create random matrix with integers of size (width, height)
-matrix = np.random.randint(0, 10, (width, height)).astype(np.float32)
+matrix = np.random.randint(0, 10, (height, width)).astype(np.float32)
 
 # Print the matrix
 print_matrix(matrix, "Original Matrix")
@@ -66,7 +66,7 @@ runner.memcpy_h2d(
     height,
     1,
     streaming=False,
-    order=MemcpyOrder.COL_MAJOR,
+    order=MemcpyOrder.ROW_MAJOR,
     data_type=MemcpyDataType.MEMCPY_32BIT,
     nonblock=False,
 )
@@ -89,13 +89,13 @@ runner.memcpy_d2h(
     height,
     1,
     streaming=False,
-    order=MemcpyOrder.COL_MAJOR,
+    order=MemcpyOrder.ROW_MAJOR,
     data_type=MemcpyDataType.MEMCPY_32BIT,
     nonblock=False,
 )
 
 # reshape the result
-result = result.reshape(width, height)
+result = result.reshape(height, width)
 
 print("copied result from device")
 
