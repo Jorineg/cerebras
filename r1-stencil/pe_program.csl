@@ -1,3 +1,11 @@
+// 1600-1658 -> 58. receive: 16014, 1605, 1616, 1616 
+// 1658-1713 -> 55. receive: 1672, 1632, 1651, 1647
+// 1713-1768 -> 55. receive: 1727, 1688, 1709, 1704
+// 1768-1823 -> 55. receive: 1782, 1743, 1764, 1759
+
+
+const simprint = @import_module("<simprint>");
+
 param memcpy_params: comptime_struct;
 param is_static_region: bool;
 param steps: i16;
@@ -63,6 +71,7 @@ var matrix: [1]f32 = [1]f32 {0.0};
 var matrix_ptr: [*]f32 = &matrix;
 
 var steps_executed: i16 = 0;
+var wait_steps: u16 = 0;
 
 // DSDs for accessing weights and matrix
 const weights_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{rank+1} -> weights[i+1] });
@@ -131,6 +140,15 @@ fn step(exit: bool) void {
   // }
 }
 
+
+fn wait_n_cycles(n: u16) u16 {
+  wait_steps = n/2;
+  while(wait_steps > 0) {
+    wait_steps -= 1;
+  }
+  return wait_steps;
+}
+
 fn send_to_neighbors() void {
   if(col < width-1) {
     @fmovs(send_dsd_e, matrix_dsd);
@@ -154,7 +172,6 @@ fn send_to_neighbors() void {
 fn compute() void {
   init_weights();
   send_to_neighbors();
-  steps_executed+=1;
   if (is_static_region) {
     if (is_corner) {
       @activate(exit_task_id);
@@ -167,12 +184,28 @@ fn compute() void {
 }
 
 task border_activate_task(data: f32) void {
+  steps_executed+=1;
+  // if(steps_executed == 1){
+  //   return;
+  // }
   if (steps_executed >= steps) {
     @activate(exit_task_id);
     return;
   }
+  simprint.print_string("start wait: x: ");
+  simprint.print_u16_decimal(col);
+  simprint.print_string(" y: ");
+  simprint.print_u16_decimal(row);
+  simprint.print_string("\n");
+
+  // simprint.print_u16_decimal(wait_n_cycles(40));
+  //   simprint.print_string("start wait: x: ");
+  // simprint.print_u16_decimal(col);
+  // simprint.print_string(" y: ");
+  // simprint.print_u16_decimal(row);
+  // simprint.print_string("   test123\n");
+  
   send_to_neighbors();
-  steps_executed+=1;
 }
 
 task exit_task() void {

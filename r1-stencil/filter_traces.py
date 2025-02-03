@@ -7,7 +7,7 @@ def main():
     y = input("Enter the y coordinate: ")
 
     # Define the pattern to match the lines with the given coordinates and not containing 'IDLE'
-    pattern = re.compile(rf"@.* P{x}\.{y}: .*")
+    pattern = re.compile(rf"@.* P{x}\.{y}:? .*")
 
     # Read the sim.log file and filter the lines
     with open("sim.log", "r") as infile, open("sim_filtered.log", "w") as outfile:
