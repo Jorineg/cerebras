@@ -1,10 +1,11 @@
-// 1600-1658 -> 58. receive: 16014, 1605, 1616, 1616 
-// 1658-1713 -> 55. receive: 1672, 1632, 1651, 1647
-// 1713-1768 -> 55. receive: 1727, 1688, 1709, 1704
-// 1768-1823 -> 55. receive: 1782, 1743, 1764, 1759
+// 1599 - 1685 -> 86 cycles
+// 1685 - 1771 -> 86 cycles
+// 1771 - 1857 -> 86 cycles
+
 
 
 const simprint = @import_module("<simprint>");
+// const tile_config = @import_module("<tile_config>");
 
 param memcpy_params: comptime_struct;
 param is_static_region: bool;
@@ -81,6 +82,20 @@ const recv_dsd_n = @get_dsd(fabin_dsd, .{ .fabric_color = recv_n_col, .extent = 
 const recv_dsd_s = @get_dsd(fabin_dsd, .{ .fabric_color = recv_s_col, .extent = 1, .input_queue = recv_color_iq_s});
 
 
+// DSRs
+const weights_dsr = @get_dsr(dsr_src1, 0);
+const matrix_dsr = @get_dsr(dsr_src0, 1);
+const matrix_dsr_src = @get_dsr(dsr_src1, 2);
+const matrix_dsr_dest = @get_dsr(dsr_dest, 7);
+
+
+const send_dsr_e = @get_dsr(dsr_dest, 3);
+const send_dsr_w = @get_dsr(dsr_dest, 4);
+const send_dsr_n = @get_dsr(dsr_dest, 5);
+const send_dsr_s = @get_dsr(dsr_dest, 6);
+
+
+
 // function that initializes weights
 // divide weights to not have to divide in the loop
 // first weight is for center element, others are for neighbors
@@ -116,7 +131,7 @@ task receive_data_s(data: f32) void {
 // add received value to result
 fn receive_data_fn(data : f32) void {
   if(! is_static_region){
-    @fmacs(matrix_dsd, matrix_dsd, weights_dsd, data);
+    @fmacs(matrix_dsr, matrix_dsr, weights_dsr, data);
   }
 
   recv_counter+=1;
@@ -136,21 +151,21 @@ fn receive_data_fn(data : f32) void {
 
 fn send_to_neighbors() void {
   if(col < width-1 and row > 0 and row < height-1) {
-    @fmovs(send_dsd_e, matrix_dsd);
+    @fmovs(send_dsr_e, matrix_dsr_src);
   }
   if(col > 0 and row > 0 and row < height-1) {
-    @fmovs(send_dsd_w, matrix_dsd);
+    @fmovs(send_dsr_w, matrix_dsr_src);
   }
   if(row < height-1 and col > 0 and col < width-1) {
-    @fmovs(send_dsd_s, matrix_dsd);
+    @fmovs(send_dsr_s, matrix_dsr_src);
   }
   if(row > 0 and col > 0 and col < width-1) {
-    @fmovs(send_dsd_n, matrix_dsd);
+    @fmovs(send_dsr_n, matrix_dsr_src);
   }
 
   // add own value to result
   if(! is_static_region){
-    @fmuls(matrix_dsd, matrix_dsd, weights[0]);
+    @fmuls(matrix_dsr, matrix_dsr, weights[0]);
   }
 }
 
@@ -173,11 +188,28 @@ comptime {
   // When exit_task_id is activated, exit_task will execute
   @bind_local_task(exit_task, exit_task_id);
 
+  // tile_config.task_priority.set_task_priority(receive_data_task_e_id);
+  // tile_config.task_priority.set_task_priority(receive_data_task_w_id);
+  // tile_config.task_priority.set_task_priority(receive_data_task_n_id);
+  // tile_config.task_priority.set_task_priority(receive_data_task_s_id);   
+
   // bind same receive_data task to all receive data task ids
   @bind_data_task(receive_data_e, receive_data_task_e_id);
   @bind_data_task(receive_data_w, receive_data_task_w_id);
   @bind_data_task(receive_data_n, receive_data_task_n_id);
-  @bind_data_task(receive_data_s, receive_data_task_s_id);  
+  @bind_data_task(receive_data_s, receive_data_task_s_id);
+
+  // load DSDs to DSRs
+  @load_to_dsr(weights_dsr, weights_dsd);
+  @load_to_dsr(matrix_dsr, matrix_dsd);
+  @load_to_dsr(matrix_dsr_src, matrix_dsd);
+  @load_to_dsr(matrix_dsr_dest, matrix_dsd);
+  
+  @load_to_dsr(send_dsr_e, send_dsd_e);
+  @load_to_dsr(send_dsr_w, send_dsd_w);
+  @load_to_dsr(send_dsr_n, send_dsd_n);
+  @load_to_dsr(send_dsr_s, send_dsd_s);
+
 
   // On WSE-3, we must explicitly initialize input and output queues
   if (@is_arch("wse3")) {
