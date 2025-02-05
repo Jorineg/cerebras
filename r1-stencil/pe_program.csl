@@ -1,4 +1,12 @@
-// 19 cycles !!!
+// 1601 - 1621 -> 20 cycles
+// 1621 - 1640 -> 19 cycles
+// 1640 - 1656 -> 16 cycles
+// 1656 - 1673 -> 17 cycles
+// 1673 - 1689 -> 16 cycles
+// 1689 - 1706 -> 17 cycles
+// 1706 - 1722 -> 16 cycles
+// 1722 - 1739 -> 17 cycles
+
 
 // sending data to neighbors: 4 cycles (1 cycle per neighbor)
 // update value with own value from previous step: 3 cycle
@@ -15,10 +23,7 @@ param memcpy_params: comptime_struct;
 param is_static_region: bool;
 param steps: i16;
 
-param send_e_col: color;
-param send_w_col: color;
-param send_n_col: color;
-param send_s_col: color;
+param send_col: color;
 
 param recv_e_col: color;
 param recv_w_col: color;
@@ -34,10 +39,7 @@ param height: i16;
 const receive_n_to_send = if (is_static_region) 1 else 4;
 
 // Queue IDs
-const send_color_oq_e = @get_output_queue(2);  // 0 is reserved
-const send_color_oq_w = @get_output_queue(1);
-const send_color_oq_n = @get_output_queue(3);
-const send_color_oq_s = @get_output_queue(4);
+const send_color_oq = @get_output_queue(1);  // 0 is reserved
 
 const recv_color_iq_e = @get_input_queue(3);  // 0 and 1 are reserved
 const recv_color_iq_w = @get_input_queue(2);
@@ -76,10 +78,7 @@ const matrix_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> matrix[0] }
 const zero_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> zero[0] });
 const dev_null_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> dev_null[0] });
 
-const send_dsd_e = @get_dsd(fabout_dsd, .{ .fabric_color = send_e_col, .extent = 1, .output_queue = send_color_oq_e});
-const send_dsd_w = @get_dsd(fabout_dsd, .{ .fabric_color = send_w_col, .extent = 1, .output_queue = send_color_oq_w});
-const send_dsd_n = @get_dsd(fabout_dsd, .{ .fabric_color = send_n_col, .extent = 1, .output_queue = send_color_oq_n});
-const send_dsd_s = @get_dsd(fabout_dsd, .{ .fabric_color = send_s_col, .extent = 1, .output_queue = send_color_oq_s});
+const send_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_col, .extent = 1, .output_queue = send_color_oq });
 
 const recv_dsd_e = @get_dsd(fabin_dsd, .{ .fabric_color = recv_e_col, .extent = 1, .input_queue = recv_color_iq_e});
 const recv_dsd_w = @get_dsd(fabin_dsd, .{ .fabric_color = recv_w_col, .extent = 1, .input_queue = recv_color_iq_w});
@@ -94,10 +93,7 @@ const matrix_dsr_dest = @get_dsr(dsr_dest, 7);
 const dev_null_dsr = @get_dsr(dsr_dest, 12);
 
 
-const send_dsr_e = @get_dsr(dsr_dest, 3);
-const send_dsr_w = @get_dsr(dsr_dest, 4);
-const send_dsr_n = @get_dsr(dsr_dest, 5);
-const send_dsr_s = @get_dsr(dsr_dest, 6);
+const send_dsr = @get_dsr(dsr_dest, 3);
 
 const recv_dsr_e = @get_dsr(dsr_src1, 8);
 const recv_dsr_w = @get_dsr(dsr_src1, 9);
@@ -155,18 +151,7 @@ fn border_receive_data() void {
 
 
 fn send_to_neighbors() void {
-  if(col < width-1 and row > 0 and row < height-1) {
-    @fmovs(send_dsr_e, matrix_dsr_src);
-  }
-  if(col > 0 and row > 0 and row < height-1) {
-    @fmovs(send_dsr_w, matrix_dsr_src);
-  }
-  if(row < height-1 and col > 0 and col < width-1) {
-    @fmovs(send_dsr_s, matrix_dsr_src);
-  }
-  if(row > 0 and col > 0 and col < width-1) {
-    @fmovs(send_dsr_n, matrix_dsr_src);
-  }
+  @fmovs(send_dsr, matrix_dsr_src);
 }
 
 // Call gemv function and send/ receive partial result y
@@ -195,10 +180,7 @@ comptime {
   @load_to_dsr(matrix_dsr_dest, matrix_dsd);
   @load_to_dsr(dev_null_dsr, dev_null_dsd);
   
-  @load_to_dsr(send_dsr_e, send_dsd_e);
-  @load_to_dsr(send_dsr_w, send_dsd_w);
-  @load_to_dsr(send_dsr_n, send_dsd_n);
-  @load_to_dsr(send_dsr_s, send_dsd_s);
+  @load_to_dsr(send_dsr, send_dsd);
 
   @load_to_dsr(recv_dsr_e, recv_dsd_e);
   @load_to_dsr(recv_dsr_w, recv_dsd_w);
@@ -207,10 +189,7 @@ comptime {
 
   // On WSE-3, we must explicitly initialize input and output queues
   if (@is_arch("wse3")) {
-    @initialize_queue(send_color_oq_e, .{ .color = send_e_col });
-    @initialize_queue(send_color_oq_w, .{ .color = send_w_col });
-    @initialize_queue(send_color_oq_n, .{ .color = send_n_col });
-    @initialize_queue(send_color_oq_s, .{ .color = send_s_col });
+    @initialize_queue(send_color_oq, .{ .color = send_col });
 
     @initialize_queue(recv_color_iq_e, .{ .color = recv_e_col });
     @initialize_queue(recv_color_iq_w, .{ .color = recv_w_col });
