@@ -1,7 +1,7 @@
 // 1602 - 1633 -> 31 cycles
-// 1631 - 1664 -> 33 cycles
-// 1664 - 1695 -> 31 cycles
-// 1695 - 1726 -> 31 cycles
+// 1633 - 1660 -> 27 cycles
+// 1660 - 1687 -> 27 cycles
+// 1687 - 1714 -> 27 cycles
 
 
 
@@ -175,10 +175,10 @@ fn loop() void {
   for (@range(i16, steps)) |i| {
     send_to_neighbors();
     if (!is_static_region){
-      @fmacs(matrix_dsd, matrix_dsd, recv_dsd_e, weight_one);
-      @fmacs(matrix_dsd, matrix_dsd, recv_dsd_w, weight_one);
-      @fmacs(matrix_dsd, matrix_dsd, recv_dsd_n, weight_one);
-      @fmacs(matrix_dsd, matrix_dsd, recv_dsd_s, weight_one);
+      @fmacs(matrix_dsr, matrix_dsr, recv_dsd_e, weight_one);
+      @fmacs(matrix_dsr, matrix_dsr, recv_dsd_w, weight_one);
+      @fmacs(matrix_dsr, matrix_dsr, recv_dsd_n, weight_one);
+      @fmacs(matrix_dsr, matrix_dsr, recv_dsd_s, weight_one);
     }else{
       // receive and delete data
       border_receive_data();
