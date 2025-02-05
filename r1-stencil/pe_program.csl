@@ -8,9 +8,10 @@
 // 1722 - 1739 -> 17 cycles
 
 
-// sending data to neighbors: 4 cycles (1 cycle per neighbor)
+// sending data to neighbors: 1 cycle
 // update value with own value from previous step: 3 cycle
 // for each neighbor do following:
+//  - sometimes one wait cycle...
 //  - update value with neighbor value (fmacs): 3 cycle
 
 
