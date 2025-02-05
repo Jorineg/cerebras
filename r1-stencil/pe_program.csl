@@ -1,6 +1,7 @@
-// 1599 - 1685 -> 86 cycles
-// 1685 - 1771 -> 86 cycles
-// 1771 - 1857 -> 86 cycles
+// 1601 - 1662 -> 61
+// 1662 - 1726 -> 64
+// 1726 - 1790 -> 64
+
 
 
 
@@ -61,6 +62,11 @@ const zero: [1]f32 = [1]f32 {0.0};
 var matrix: [1]f32 = [1]f32 {0.0};
 var matrix_ptr: [*]f32 = &matrix;
 
+var recv_buffer_e: [1]f32;
+var recv_buffer_w: [1]f32;
+var recv_buffer_n: [1]f32;
+var recv_buffer_s: [1]f32;
+
 var steps_executed: i16 = 0;
 var wait_steps: u16 = 0;
 
@@ -81,6 +87,11 @@ const recv_dsd_w = @get_dsd(fabin_dsd, .{ .fabric_color = recv_w_col, .extent = 
 const recv_dsd_n = @get_dsd(fabin_dsd, .{ .fabric_color = recv_n_col, .extent = 1, .input_queue = recv_color_iq_n});
 const recv_dsd_s = @get_dsd(fabin_dsd, .{ .fabric_color = recv_s_col, .extent = 1, .input_queue = recv_color_iq_s});
 
+// const recv_buffer_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{4} -> recv_buffer[i] });
+const recv_buffer_e_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> recv_buffer_e[0] });
+const recv_buffer_w_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> recv_buffer_w[0] });
+const recv_buffer_n_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> recv_buffer_n[0] });
+const recv_buffer_s_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> recv_buffer_s[0] });
 
 // DSRs
 const weights_dsr = @get_dsr(dsr_src1, 0);
@@ -93,6 +104,13 @@ const send_dsr_e = @get_dsr(dsr_dest, 3);
 const send_dsr_w = @get_dsr(dsr_dest, 4);
 const send_dsr_n = @get_dsr(dsr_dest, 5);
 const send_dsr_s = @get_dsr(dsr_dest, 6);
+
+// const receive_buffer_dsr = @get_dsr(dsr_src1, 8);
+
+const receive_buffer_e_dsr = @get_dsr(dsr_src1, 8);
+const receive_buffer_w_dsr = @get_dsr(dsr_src1, 9);
+const receive_buffer_n_dsr = @get_dsr(dsr_src1, 10);
+const receive_buffer_s_dsr = @get_dsr(dsr_src1, 11);
 
 
 
@@ -112,30 +130,44 @@ fn init_weights() void {
 
 
 task receive_data_e(data: f32) void {
+  recv_buffer_e[0] = data;
   receive_data_fn(data);
 }
 
 task receive_data_w(data: f32) void {
+  recv_buffer_w[0] = data;
   receive_data_fn(data);
 }
 
 task receive_data_n(data: f32) void {
+  recv_buffer_n[0] = data;
   receive_data_fn(data);
 }
 
 task receive_data_s(data: f32) void {
+  recv_buffer_s[0] = data;
   receive_data_fn(data);
 }
 
 
 // add received value to result
 fn receive_data_fn(data : f32) void {
-  if(! is_static_region){
-    @fmacs(matrix_dsr, matrix_dsr, weights_dsr, data);
-  }
-
+  // recv_buffer[recv_counter] = data;
   recv_counter+=1;
+
+
   if (recv_counter == receive_n_to_send) {    // 4 for non-static regions, 1 for static regions
+    // do computation
+    if(! is_static_region){
+      // @fmacs(matrix_dsr, matrix_dsr, weights_dsr, data);
+      // @fmacs(matrix_four_dsr, matrix_four_dsr, receive_buffer_dsr, weights[1]);
+
+      @fmacs(matrix_dsr, matrix_dsr, receive_buffer_e_dsr, weights[1]);
+      @fmacs(matrix_dsr, matrix_dsr, receive_buffer_w_dsr, weights[1]);
+      @fmacs(matrix_dsr, matrix_dsr, receive_buffer_n_dsr, weights[1]);
+      @fmacs(matrix_dsr, matrix_dsr, receive_buffer_s_dsr, weights[1]);
+    }
+
     if (steps_executed >= steps) {
       @activate(exit_task_id);
     }else{
@@ -209,6 +241,13 @@ comptime {
   @load_to_dsr(send_dsr_w, send_dsd_w);
   @load_to_dsr(send_dsr_n, send_dsd_n);
   @load_to_dsr(send_dsr_s, send_dsd_s);
+
+  // @load_to_dsr(receive_buffer_dsr, recv_buffer_dsd);
+
+  @load_to_dsr(receive_buffer_e_dsr, recv_buffer_e_dsd);
+  @load_to_dsr(receive_buffer_w_dsr, recv_buffer_w_dsd);
+  @load_to_dsr(receive_buffer_n_dsr, recv_buffer_n_dsd);
+  @load_to_dsr(receive_buffer_s_dsr, recv_buffer_s_dsd);
 
 
   // On WSE-3, we must explicitly initialize input and output queues
