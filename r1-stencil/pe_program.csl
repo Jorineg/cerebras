@@ -1,6 +1,6 @@
-// 1612 - 1660 -> 48 cycles
-// 1660 - 1708 -> 48 cycles
-// 1708 - 1756 -> 48 cycles
+// 1607 - 1643 -> 36 cycles
+// 1643 - 1679 -> 36 cycles
+
 
 
 
@@ -203,16 +203,16 @@ fn border_receive_data() void {
 
 fn send_to_neighbors() void {
   if(col < width-1 and row > 0 and row < height-1) {
-    @fmovs(send_dsr_e, matrix_dsd);
+    @fmovs(send_dsr_e, matrix_dsr_src);
   }
   if(col > 0 and row > 0 and row < height-1) {
-    @fmovs(send_dsr_w, matrix_dsd);
+    @fmovs(send_dsr_w, matrix_dsr_src);
   }
   if(row < height-1 and col > 0 and col < width-1) {
-    @fmovs(send_dsr_s, matrix_dsd);
+    @fmovs(send_dsr_s, matrix_dsr_src);
   }
   if(row > 0 and col > 0 and col < width-1) {
-    @fmovs(send_dsr_n, matrix_dsd);
+    @fmovs(send_dsr_n, matrix_dsr_src);
   }
 
   // add own value to result
