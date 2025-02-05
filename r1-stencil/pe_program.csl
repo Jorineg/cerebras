@@ -1,7 +1,6 @@
-// 1601 - 1662 -> 61
-// 1662 - 1726 -> 64
-// 1726 - 1790 -> 64
-
+// 1612 - 1660 -> 48 cycles
+// 1660 - 1708 -> 48 cycles
+// 1708 - 1756 -> 48 cycles
 
 
 
@@ -43,10 +42,10 @@ const recv_color_iq_s = @get_input_queue(5);
 
 const is_corner = (col == 0 or col == width-1) and (row == 0 or row == height-1);
 
-const receive_data_task_e_id: data_task_id = if (@is_arch("wse3")) @get_data_task_id(recv_color_iq_e) else @get_data_task_id(recv_e_col);
-const receive_data_task_w_id: data_task_id = if (@is_arch("wse3")) @get_data_task_id(recv_color_iq_w) else @get_data_task_id(recv_w_col);
-const receive_data_task_n_id: data_task_id = if (@is_arch("wse3")) @get_data_task_id(recv_color_iq_n) else @get_data_task_id(recv_n_col);
-const receive_data_task_s_id: data_task_id = if (@is_arch("wse3")) @get_data_task_id(recv_color_iq_s) else @get_data_task_id(recv_s_col);
+// const receive_data_task_e_id: data_task_id = if (@is_arch("wse3")) @get_data_task_id(recv_color_iq_e) else @get_data_task_id(recv_e_col);
+// const receive_data_task_w_id: data_task_id = if (@is_arch("wse3")) @get_data_task_id(recv_color_iq_w) else @get_data_task_id(recv_w_col);
+// const receive_data_task_n_id: data_task_id = if (@is_arch("wse3")) @get_data_task_id(recv_color_iq_n) else @get_data_task_id(recv_n_col);
+// const receive_data_task_s_id: data_task_id = if (@is_arch("wse3")) @get_data_task_id(recv_color_iq_s) else @get_data_task_id(recv_s_col);
 
 // Task ID used by a local task to unblock cmd stream
 const exit_task_id: local_task_id = @get_local_task_id(9);
@@ -59,13 +58,18 @@ const rank: i16 = 1;
 var weights = [rank+1]f32 {1.0, 0.5};
 const zero: [1]f32 = [1]f32 {0.0};
 
+const weight_zero: f32 = 1.0/3.0;
+const weight_one: f32 = 1.0/6.0;
+
+var dev_null: [1]f32;
+
 var matrix: [1]f32 = [1]f32 {0.0};
 var matrix_ptr: [*]f32 = &matrix;
 
-var recv_buffer_e: [1]f32;
-var recv_buffer_w: [1]f32;
-var recv_buffer_n: [1]f32;
-var recv_buffer_s: [1]f32;
+// var recv_buffer_e: [1]f32;
+// var recv_buffer_w: [1]f32;
+// var recv_buffer_n: [1]f32;
+// var recv_buffer_s: [1]f32;
 
 var steps_executed: i16 = 0;
 var wait_steps: u16 = 0;
@@ -76,6 +80,7 @@ var recv_counter: i16 = 0;
 const weights_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{rank+1} -> weights[i+1] });
 const matrix_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> matrix[0] });
 const zero_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> zero[0] });
+const dev_null_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> dev_null[0] });
 
 const send_dsd_e = @get_dsd(fabout_dsd, .{ .fabric_color = send_e_col, .extent = 1, .output_queue = send_color_oq_e});
 const send_dsd_w = @get_dsd(fabout_dsd, .{ .fabric_color = send_w_col, .extent = 1, .output_queue = send_color_oq_w});
@@ -88,10 +93,10 @@ const recv_dsd_n = @get_dsd(fabin_dsd, .{ .fabric_color = recv_n_col, .extent = 
 const recv_dsd_s = @get_dsd(fabin_dsd, .{ .fabric_color = recv_s_col, .extent = 1, .input_queue = recv_color_iq_s});
 
 // const recv_buffer_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{4} -> recv_buffer[i] });
-const recv_buffer_e_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> recv_buffer_e[0] });
-const recv_buffer_w_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> recv_buffer_w[0] });
-const recv_buffer_n_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> recv_buffer_n[0] });
-const recv_buffer_s_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> recv_buffer_s[0] });
+// const recv_buffer_e_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> recv_buffer_e[0] });
+// const recv_buffer_w_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> recv_buffer_w[0] });
+// const recv_buffer_n_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> recv_buffer_n[0] });
+// const recv_buffer_s_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> recv_buffer_s[0] });
 
 // DSRs
 const weights_dsr = @get_dsr(dsr_src1, 0);
@@ -105,12 +110,17 @@ const send_dsr_w = @get_dsr(dsr_dest, 4);
 const send_dsr_n = @get_dsr(dsr_dest, 5);
 const send_dsr_s = @get_dsr(dsr_dest, 6);
 
+const recv_dsr_e = @get_dsr(dsr_src1, 8);
+const recv_dsr_w = @get_dsr(dsr_src1, 9);
+const recv_dsr_n = @get_dsr(dsr_src1, 10);
+const recv_dsr_s = @get_dsr(dsr_src1, 11);
+
 // const receive_buffer_dsr = @get_dsr(dsr_src1, 8);
 
-const receive_buffer_e_dsr = @get_dsr(dsr_src1, 8);
-const receive_buffer_w_dsr = @get_dsr(dsr_src1, 9);
-const receive_buffer_n_dsr = @get_dsr(dsr_src1, 10);
-const receive_buffer_s_dsr = @get_dsr(dsr_src1, 11);
+// const receive_buffer_e_dsr = @get_dsr(dsr_src1, 8);
+// const receive_buffer_w_dsr = @get_dsr(dsr_src1, 9);
+// const receive_buffer_n_dsr = @get_dsr(dsr_src1, 10);
+// const receive_buffer_s_dsr = @get_dsr(dsr_src1, 11);
 
 
 
@@ -129,53 +139,63 @@ fn init_weights() void {
 }
 
 
-task receive_data_e(data: f32) void {
-  recv_buffer_e[0] = data;
-  receive_data_fn(data);
-}
-
-task receive_data_w(data: f32) void {
-  recv_buffer_w[0] = data;
-  receive_data_fn(data);
-}
-
-task receive_data_n(data: f32) void {
-  recv_buffer_n[0] = data;
-  receive_data_fn(data);
-}
-
-task receive_data_s(data: f32) void {
-  recv_buffer_s[0] = data;
-  receive_data_fn(data);
-}
-
-
 // add received value to result
-fn receive_data_fn(data : f32) void {
-  // recv_buffer[recv_counter] = data;
-  recv_counter+=1;
+// fn receive_data_fn(data : f32) void {
+//   // recv_buffer[recv_counter] = data;
+//   recv_counter+=1;
 
 
-  if (recv_counter == receive_n_to_send) {    // 4 for non-static regions, 1 for static regions
-    // do computation
-    if(! is_static_region){
-      // @fmacs(matrix_dsr, matrix_dsr, weights_dsr, data);
-      // @fmacs(matrix_four_dsr, matrix_four_dsr, receive_buffer_dsr, weights[1]);
+//   if (recv_counter == receive_n_to_send) {    // 4 for non-static regions, 1 for static regions
+//     // do computation
+//     if(! is_static_region){
+//       // @fmacs(matrix_dsr, matrix_dsr, weights_dsr, data);
+//       // @fmacs(matrix_four_dsr, matrix_four_dsr, receive_buffer_dsr, weights[1]);
 
-      @fmacs(matrix_dsr, matrix_dsr, receive_buffer_e_dsr, weights[1]);
-      @fmacs(matrix_dsr, matrix_dsr, receive_buffer_w_dsr, weights[1]);
-      @fmacs(matrix_dsr, matrix_dsr, receive_buffer_n_dsr, weights[1]);
-      @fmacs(matrix_dsr, matrix_dsr, receive_buffer_s_dsr, weights[1]);
-    }
+//       @fmacs(matrix_dsr, matrix_dsr, receive_buffer_e_dsr, weights[1]);
+//       @fmacs(matrix_dsr, matrix_dsr, receive_buffer_w_dsr, weights[1]);
+//       @fmacs(matrix_dsr, matrix_dsr, receive_buffer_n_dsr, weights[1]);
+//       @fmacs(matrix_dsr, matrix_dsr, receive_buffer_s_dsr, weights[1]);
+//     }
 
-    if (steps_executed >= steps) {
-      @activate(exit_task_id);
+//     if (steps_executed >= steps) {
+//       @activate(exit_task_id);
+//     }else{
+//       // add own value to result
+//       send_to_neighbors();
+//       recv_counter = 0;
+//       steps_executed+=1;
+//     }
+//   }
+// }
+
+fn loop() void {
+  // synchronized version
+  for (@range(i16, steps)) |i| {
+    send_to_neighbors();
+    if (!is_static_region){
+      @fmacs(matrix_dsd, matrix_dsd, recv_dsd_e, weight_one);
+      @fmacs(matrix_dsd, matrix_dsd, recv_dsd_w, weight_one);
+      @fmacs(matrix_dsd, matrix_dsd, recv_dsd_n, weight_one);
+      @fmacs(matrix_dsd, matrix_dsd, recv_dsd_s, weight_one);
     }else{
-      // add own value to result
-      send_to_neighbors();
-      recv_counter = 0;
-      steps_executed+=1;
+      // receive and delete data
+      border_receive_data();
     }
+  }
+
+  @activate(exit_task_id);
+}
+
+
+fn border_receive_data() void {
+  if (col == 0) {
+    @fmovs(dev_null_dsd, recv_dsd_e);
+  }else if (col == width-1) {
+    @fmovs(dev_null_dsd, recv_dsd_w);
+  }else if (row == 0) {
+    @fmovs(dev_null_dsd, recv_dsd_s);
+  }else if (row == height-1) {
+    @fmovs(dev_null_dsd, recv_dsd_n);
   }
 }
 
@@ -183,31 +203,31 @@ fn receive_data_fn(data : f32) void {
 
 fn send_to_neighbors() void {
   if(col < width-1 and row > 0 and row < height-1) {
-    @fmovs(send_dsr_e, matrix_dsr_src);
+    @fmovs(send_dsr_e, matrix_dsd);
   }
   if(col > 0 and row > 0 and row < height-1) {
-    @fmovs(send_dsr_w, matrix_dsr_src);
+    @fmovs(send_dsr_w, matrix_dsd);
   }
   if(row < height-1 and col > 0 and col < width-1) {
-    @fmovs(send_dsr_s, matrix_dsr_src);
+    @fmovs(send_dsr_s, matrix_dsd);
   }
   if(row > 0 and col > 0 and col < width-1) {
-    @fmovs(send_dsr_n, matrix_dsr_src);
+    @fmovs(send_dsr_n, matrix_dsd);
   }
 
   // add own value to result
   if(! is_static_region){
-    @fmuls(matrix_dsr, matrix_dsr, weights[0]);
+    @fmuls(matrix_dsd, matrix_dsd, weight_zero);
   }
 }
 
 // Call gemv function and send/ receive partial result y
 fn compute() void {
   init_weights();
-  steps_executed += 1;
-  send_to_neighbors();
   if (is_corner) {
     @activate(exit_task_id);
+  }else{
+    loop();
   }
 }
 
@@ -226,10 +246,10 @@ comptime {
   // tile_config.task_priority.set_task_priority(receive_data_task_s_id);   
 
   // bind same receive_data task to all receive data task ids
-  @bind_data_task(receive_data_e, receive_data_task_e_id);
-  @bind_data_task(receive_data_w, receive_data_task_w_id);
-  @bind_data_task(receive_data_n, receive_data_task_n_id);
-  @bind_data_task(receive_data_s, receive_data_task_s_id);
+  // @bind_data_task(receive_data_e, receive_data_task_e_id);
+  // @bind_data_task(receive_data_w, receive_data_task_w_id);
+  // @bind_data_task(receive_data_n, receive_data_task_n_id);
+  // @bind_data_task(receive_data_s, receive_data_task_s_id);
 
   // load DSDs to DSRs
   @load_to_dsr(weights_dsr, weights_dsd);
@@ -242,12 +262,17 @@ comptime {
   @load_to_dsr(send_dsr_n, send_dsd_n);
   @load_to_dsr(send_dsr_s, send_dsd_s);
 
+  @load_to_dsr(recv_dsr_e, recv_dsd_e);
+  @load_to_dsr(recv_dsr_w, recv_dsd_w);
+  @load_to_dsr(recv_dsr_n, recv_dsd_n);
+  @load_to_dsr(recv_dsr_s, recv_dsd_s);
+
   // @load_to_dsr(receive_buffer_dsr, recv_buffer_dsd);
 
-  @load_to_dsr(receive_buffer_e_dsr, recv_buffer_e_dsd);
-  @load_to_dsr(receive_buffer_w_dsr, recv_buffer_w_dsd);
-  @load_to_dsr(receive_buffer_n_dsr, recv_buffer_n_dsd);
-  @load_to_dsr(receive_buffer_s_dsr, recv_buffer_s_dsd);
+  // @load_to_dsr(receive_buffer_e_dsr, recv_buffer_e_dsd);
+  // @load_to_dsr(receive_buffer_w_dsr, recv_buffer_w_dsd);
+  // @load_to_dsr(receive_buffer_n_dsr, recv_buffer_n_dsd);
+  // @load_to_dsr(receive_buffer_s_dsr, recv_buffer_s_dsd);
 
 
   // On WSE-3, we must explicitly initialize input and output queues
