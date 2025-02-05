@@ -213,15 +213,15 @@ comptime {
 
   // On WSE-3, we must explicitly initialize input and output queues
   if (@is_arch("wse3")) {
-    @initialize_queue(send_color_oq_e, .{ .color = send_color_oq_e });
-    @initialize_queue(send_color_oq_w, .{ .color = send_color_oq_w });
-    @initialize_queue(send_color_oq_n, .{ .color = send_color_oq_n });
-    @initialize_queue(send_color_oq_s, .{ .color = send_color_oq_s });
+    @initialize_queue(send_color_oq_e, .{ .color = send_e_col });
+    @initialize_queue(send_color_oq_w, .{ .color = send_w_col });
+    @initialize_queue(send_color_oq_n, .{ .color = send_n_col });
+    @initialize_queue(send_color_oq_s, .{ .color = send_s_col });
 
-    @initialize_queue(recv_color_iq_e, .{ .color = recv_color_iq_e });
-    @initialize_queue(recv_color_iq_w, .{ .color = recv_color_iq_w });
-    @initialize_queue(recv_color_iq_n, .{ .color = recv_color_iq_n });
-    @initialize_queue(recv_color_iq_s, .{ .color = recv_color_iq_s });
+    @initialize_queue(recv_color_iq_e, .{ .color = recv_e_col });
+    @initialize_queue(recv_color_iq_w, .{ .color = recv_w_col });
+    @initialize_queue(recv_color_iq_n, .{ .color = recv_n_col });
+    @initialize_queue(recv_color_iq_s, .{ .color = recv_s_col });
   }
 
   @export_symbol(matrix_ptr, "matrix");
