@@ -1,5 +1,7 @@
-// 1607 - 1643 -> 36 cycles
-// 1643 - 1679 -> 36 cycles
+// 1602 - 1633 -> 31 cycles
+// 1631 - 1664 -> 33 cycles
+// 1664 - 1695 -> 31 cycles
+// 1695 - 1726 -> 31 cycles
 
 
 
@@ -217,7 +219,7 @@ fn send_to_neighbors() void {
 
   // add own value to result
   if(! is_static_region){
-    @fmuls(matrix_dsd, matrix_dsd, weight_zero);
+    @fmuls(matrix_dsr, matrix_dsr, weight_zero);
   }
 }
 
