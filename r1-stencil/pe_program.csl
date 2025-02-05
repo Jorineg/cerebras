@@ -1,12 +1,14 @@
-// 1602 - 1633 -> 31 cycles
-// 1633 - 1660 -> 27 cycles
-// 1660 - 1687 -> 27 cycles
-// 1687 - 1714 -> 27 cycles
+// 19 cycles !!!
+
+// sending data to neighbors: 4 cycles (1 cycle per neighbor)
+// update value with own value from previous step: 3 cycle
+// for each neighbor do following:
+//  - update value with neighbor value (fmacs): 3 cycle
 
 
 
 
-const simprint = @import_module("<simprint>");
+// const simprint = @import_module("<simprint>");
 // const tile_config = @import_module("<tile_config>");
 
 param memcpy_params: comptime_struct;
@@ -44,11 +46,6 @@ const recv_color_iq_s = @get_input_queue(5);
 
 const is_corner = (col == 0 or col == width-1) and (row == 0 or row == height-1);
 
-// const receive_data_task_e_id: data_task_id = if (@is_arch("wse3")) @get_data_task_id(recv_color_iq_e) else @get_data_task_id(recv_e_col);
-// const receive_data_task_w_id: data_task_id = if (@is_arch("wse3")) @get_data_task_id(recv_color_iq_w) else @get_data_task_id(recv_w_col);
-// const receive_data_task_n_id: data_task_id = if (@is_arch("wse3")) @get_data_task_id(recv_color_iq_n) else @get_data_task_id(recv_n_col);
-// const receive_data_task_s_id: data_task_id = if (@is_arch("wse3")) @get_data_task_id(recv_color_iq_s) else @get_data_task_id(recv_s_col);
-
 // Task ID used by a local task to unblock cmd stream
 const exit_task_id: local_task_id = @get_local_task_id(9);
 
@@ -67,11 +64,6 @@ var dev_null: [1]f32;
 
 var matrix: [1]f32 = [1]f32 {0.0};
 var matrix_ptr: [*]f32 = &matrix;
-
-// var recv_buffer_e: [1]f32;
-// var recv_buffer_w: [1]f32;
-// var recv_buffer_n: [1]f32;
-// var recv_buffer_s: [1]f32;
 
 var steps_executed: i16 = 0;
 var wait_steps: u16 = 0;
@@ -94,17 +86,12 @@ const recv_dsd_w = @get_dsd(fabin_dsd, .{ .fabric_color = recv_w_col, .extent = 
 const recv_dsd_n = @get_dsd(fabin_dsd, .{ .fabric_color = recv_n_col, .extent = 1, .input_queue = recv_color_iq_n});
 const recv_dsd_s = @get_dsd(fabin_dsd, .{ .fabric_color = recv_s_col, .extent = 1, .input_queue = recv_color_iq_s});
 
-// const recv_buffer_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{4} -> recv_buffer[i] });
-// const recv_buffer_e_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> recv_buffer_e[0] });
-// const recv_buffer_w_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> recv_buffer_w[0] });
-// const recv_buffer_n_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> recv_buffer_n[0] });
-// const recv_buffer_s_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> recv_buffer_s[0] });
-
 // DSRs
 const weights_dsr = @get_dsr(dsr_src1, 0);
 const matrix_dsr = @get_dsr(dsr_src0, 1);
 const matrix_dsr_src = @get_dsr(dsr_src1, 2);
 const matrix_dsr_dest = @get_dsr(dsr_dest, 7);
+const dev_null_dsr = @get_dsr(dsr_dest, 12);
 
 
 const send_dsr_e = @get_dsr(dsr_dest, 3);
@@ -116,14 +103,6 @@ const recv_dsr_e = @get_dsr(dsr_src1, 8);
 const recv_dsr_w = @get_dsr(dsr_src1, 9);
 const recv_dsr_n = @get_dsr(dsr_src1, 10);
 const recv_dsr_s = @get_dsr(dsr_src1, 11);
-
-// const receive_buffer_dsr = @get_dsr(dsr_src1, 8);
-
-// const receive_buffer_e_dsr = @get_dsr(dsr_src1, 8);
-// const receive_buffer_w_dsr = @get_dsr(dsr_src1, 9);
-// const receive_buffer_n_dsr = @get_dsr(dsr_src1, 10);
-// const receive_buffer_s_dsr = @get_dsr(dsr_src1, 11);
-
 
 
 // function that initializes weights
@@ -140,45 +119,17 @@ fn init_weights() void {
   }
 }
 
-
-// add received value to result
-// fn receive_data_fn(data : f32) void {
-//   // recv_buffer[recv_counter] = data;
-//   recv_counter+=1;
-
-
-//   if (recv_counter == receive_n_to_send) {    // 4 for non-static regions, 1 for static regions
-//     // do computation
-//     if(! is_static_region){
-//       // @fmacs(matrix_dsr, matrix_dsr, weights_dsr, data);
-//       // @fmacs(matrix_four_dsr, matrix_four_dsr, receive_buffer_dsr, weights[1]);
-
-//       @fmacs(matrix_dsr, matrix_dsr, receive_buffer_e_dsr, weights[1]);
-//       @fmacs(matrix_dsr, matrix_dsr, receive_buffer_w_dsr, weights[1]);
-//       @fmacs(matrix_dsr, matrix_dsr, receive_buffer_n_dsr, weights[1]);
-//       @fmacs(matrix_dsr, matrix_dsr, receive_buffer_s_dsr, weights[1]);
-//     }
-
-//     if (steps_executed >= steps) {
-//       @activate(exit_task_id);
-//     }else{
-//       // add own value to result
-//       send_to_neighbors();
-//       recv_counter = 0;
-//       steps_executed+=1;
-//     }
-//   }
-// }
-
 fn loop() void {
   // synchronized version
   for (@range(i16, steps)) |i| {
     send_to_neighbors();
     if (!is_static_region){
-      @fmacs(matrix_dsr, matrix_dsr, recv_dsd_e, weight_one);
-      @fmacs(matrix_dsr, matrix_dsr, recv_dsd_w, weight_one);
-      @fmacs(matrix_dsr, matrix_dsr, recv_dsd_n, weight_one);
-      @fmacs(matrix_dsr, matrix_dsr, recv_dsd_s, weight_one);
+    // add own value to result
+      @fmuls(matrix_dsr, matrix_dsr, weight_zero);
+      @fmacs(matrix_dsr, matrix_dsr, recv_dsr_e, weight_one);
+      @fmacs(matrix_dsr, matrix_dsr, recv_dsr_w, weight_one);
+      @fmacs(matrix_dsr, matrix_dsr, recv_dsr_n, weight_one);
+      @fmacs(matrix_dsr, matrix_dsr, recv_dsr_s, weight_one);
     }else{
       // receive and delete data
       border_receive_data();
@@ -216,11 +167,6 @@ fn send_to_neighbors() void {
   if(row > 0 and col > 0 and col < width-1) {
     @fmovs(send_dsr_n, matrix_dsr_src);
   }
-
-  // add own value to result
-  if(! is_static_region){
-    @fmuls(matrix_dsr, matrix_dsr, weight_zero);
-  }
 }
 
 // Call gemv function and send/ receive partial result y
@@ -242,22 +188,12 @@ comptime {
   // When exit_task_id is activated, exit_task will execute
   @bind_local_task(exit_task, exit_task_id);
 
-  // tile_config.task_priority.set_task_priority(receive_data_task_e_id);
-  // tile_config.task_priority.set_task_priority(receive_data_task_w_id);
-  // tile_config.task_priority.set_task_priority(receive_data_task_n_id);
-  // tile_config.task_priority.set_task_priority(receive_data_task_s_id);   
-
-  // bind same receive_data task to all receive data task ids
-  // @bind_data_task(receive_data_e, receive_data_task_e_id);
-  // @bind_data_task(receive_data_w, receive_data_task_w_id);
-  // @bind_data_task(receive_data_n, receive_data_task_n_id);
-  // @bind_data_task(receive_data_s, receive_data_task_s_id);
-
   // load DSDs to DSRs
   @load_to_dsr(weights_dsr, weights_dsd);
   @load_to_dsr(matrix_dsr, matrix_dsd);
   @load_to_dsr(matrix_dsr_src, matrix_dsd);
   @load_to_dsr(matrix_dsr_dest, matrix_dsd);
+  @load_to_dsr(dev_null_dsr, dev_null_dsd);
   
   @load_to_dsr(send_dsr_e, send_dsd_e);
   @load_to_dsr(send_dsr_w, send_dsd_w);
@@ -269,14 +205,6 @@ comptime {
   @load_to_dsr(recv_dsr_n, recv_dsd_n);
   @load_to_dsr(recv_dsr_s, recv_dsd_s);
 
-  // @load_to_dsr(receive_buffer_dsr, recv_buffer_dsd);
-
-  // @load_to_dsr(receive_buffer_e_dsr, recv_buffer_e_dsd);
-  // @load_to_dsr(receive_buffer_w_dsr, recv_buffer_w_dsd);
-  // @load_to_dsr(receive_buffer_n_dsr, recv_buffer_n_dsd);
-  // @load_to_dsr(receive_buffer_s_dsr, recv_buffer_s_dsd);
-
-
   // On WSE-3, we must explicitly initialize input and output queues
   if (@is_arch("wse3")) {
     @initialize_queue(send_color_oq_e, .{ .color = send_e_col });
@@ -284,6 +212,14 @@ comptime {
     @initialize_queue(send_color_oq_n, .{ .color = send_n_col });
     @initialize_queue(send_color_oq_s, .{ .color = send_s_col });
 
+    @initialize_queue(recv_color_iq_e, .{ .color = recv_e_col });
+    @initialize_queue(recv_color_iq_w, .{ .color = recv_w_col });
+    @initialize_queue(recv_color_iq_n, .{ .color = recv_n_col });
+    @initialize_queue(recv_color_iq_s, .{ .color = recv_s_col });
+  }else{
+
+    // must also be initialized on WSE-2 manually if using dsrs
+    // not documented !!!
     @initialize_queue(recv_color_iq_e, .{ .color = recv_e_col });
     @initialize_queue(recv_color_iq_w, .{ .color = recv_w_col });
     @initialize_queue(recv_color_iq_n, .{ .color = recv_n_col });
