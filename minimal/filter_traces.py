@@ -14,8 +14,8 @@ def main():
         for line in infile:
             if pattern.search(line):
                 # check that line does not contain 'IDLE' or 'NOP'
-                if "IDLE" not in line and "NOP" not in line:
-                    outfile.write(line)
+                # if "IDLE" not in line and "NOP" not in line:
+                outfile.write(line)
 
 
 if __name__ == "__main__":

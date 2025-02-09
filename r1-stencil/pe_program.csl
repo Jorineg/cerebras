@@ -1,11 +1,9 @@
-// 1601 - 1621 -> 20 cycles
-// 1621 - 1640 -> 19 cycles
-// 1640 - 1656 -> 16 cycles
-// 1656 - 1673 -> 17 cycles
-// 1673 - 1689 -> 16 cycles
-// 1689 - 1706 -> 17 cycles
-// 1706 - 1722 -> 16 cycles
-// 1722 - 1739 -> 17 cycles
+// 1603 - 1624 -> 21 cycles
+// 1624 - 1644 -> 20 cycles
+// 1644 - 1661 -> 17 cycles
+// 1661 - 1679 -> 18 cycles
+// 1679 - 1696 -> 17 cycles
+
 
 
 // sending data to neighbors: 1 cycle
@@ -87,7 +85,7 @@ const recv_dsd_n = @get_dsd(fabin_dsd, .{ .fabric_color = recv_n_col, .extent = 
 const recv_dsd_s = @get_dsd(fabin_dsd, .{ .fabric_color = recv_s_col, .extent = 1, .input_queue = recv_color_iq_s});
 
 // DSRs
-const weights_dsr = @get_dsr(dsr_src1, 0);
+const weights_dsr = @get_dsr(dsr_src1, 12);
 const matrix_dsr = @get_dsr(dsr_src0, 1);
 const matrix_dsr_src = @get_dsr(dsr_src1, 2);
 const matrix_dsr_dest = @get_dsr(dsr_dest, 7);
@@ -123,10 +121,14 @@ fn loop() void {
     if (!is_static_region){
     // add own value to result
       @fmuls(matrix_dsr, matrix_dsr, weight_zero);
-      @fmacs(matrix_dsr, matrix_dsr, recv_dsr_e, weight_one);
-      @fmacs(matrix_dsr, matrix_dsr, recv_dsr_w, weight_one);
-      @fmacs(matrix_dsr, matrix_dsr, recv_dsr_n, weight_one);
-      @fmacs(matrix_dsr, matrix_dsr, recv_dsr_s, weight_one);
+      // @fmacs(matrix_dsr, matrix_dsr, recv_dsr_e, weight_one);
+      // @fmacs(matrix_dsr, matrix_dsr, recv_dsr_w, weight_one);
+      // @fmacs(matrix_dsr, matrix_dsr, recv_dsr_n, weight_one);
+      // @fmacs(matrix_dsr, matrix_dsr, recv_dsr_s, weight_one);
+      @fadds(matrix_dsr, matrix_dsr, recv_dsr_e);
+      @fadds(matrix_dsr, matrix_dsr, recv_dsr_w);
+      @fadds(matrix_dsr, matrix_dsr, recv_dsr_n);
+      @fadds(matrix_dsr, matrix_dsr, recv_dsr_s);
     }else{
       // receive and delete data
       border_receive_data();
@@ -152,7 +154,8 @@ fn border_receive_data() void {
 
 
 fn send_to_neighbors() void {
-  @fmovs(send_dsr, matrix_dsr_src);
+  // @fmovs(send_dsr, matrix_dsr_src);
+  @fmuls(send_dsr, matrix_dsd, weight_one);
 }
 
 // Call gemv function and send/ receive partial result y
