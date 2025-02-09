@@ -29,8 +29,8 @@
     "logfile": "",
     "minloglevel": "INFO"
   },
-  "lvdsRecvBandwidthCycles": 0,
-  "lvdsSendBandwidthCycles": 0,
+  "lvdsRecvBandwidthCycles": 0.0,
+  "lvdsSendBandwidthCycles": 0.0,
   "maxStartupDelay": 0,
   "memwatch": [],
   "multinode": {
