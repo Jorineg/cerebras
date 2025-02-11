@@ -14,12 +14,12 @@ const size: u16 = 10;
 
 var data:    [size]f32 = [size]f32 {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0};
 var weights: [size]f32 = [size]f32 {2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 1.0};
-var single_value: [1]f32 = [1]f32 {3.0};
+var other_value: [1]f32 = [1]f32 {3.0};
 
 const value_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> value[0] });
-const data_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{10} -> data[i] });
-const weights_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{10} -> weights[i] });
-const other_value_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> single_value[0] });
+const data_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> data[i] });
+const weights_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> weights[i] });
+const other_value_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> other_value[0] });
 
 const value_dsr_dest = @get_dsr(dsr_dest, 1);
 const value_dsr_src0 = @get_dsr(dsr_src0, 2);
@@ -55,15 +55,19 @@ fn start() void {
   //   init_dsds(); // need to reinitialize dsds every iteration
   // }
 
-  @fmacs(value_dsr_src0, value_dsr_src0, other_value_dsr_src1, 1.1);
-  @fmacs(value_dsr_src0, value_dsr_src0, other_value_dsr_src1, 1.1);
-  @fmacs(value_dsr_src0, value_dsr_src0, other_value_dsr_src1, 1.1);
-  @fmacs(value_dsr_src0, value_dsr_src0, other_value_dsr_src1, 1.1);
-  @fmacs(value_dsr_src0, value_dsr_src0, other_value_dsr_src1, 1.1);
+  // @fmacs(value_dsr_src0, value_dsr_src0, other_value_dsr_src1, 1.1);
+  // @fmacs(value_dsr_src0, value_dsr_src0, other_value_dsr_src1, 1.1);
+  // @fmacs(value_dsr_src0, value_dsr_src0, other_value_dsr_src1, 1.1);
+  // @fmacs(value_dsr_src0, value_dsr_src0, other_value_dsr_src1, 1.1);
+  // @fmacs(value_dsr_src0, value_dsr_src0, other_value_dsr_src1, 1.1);
 
-// 4 empfangen
-// 1 multiply
-// 4 add
+
+  @fadds(value_dsr_src0, value_dsr_src0, 1.1);
+  @fadds(data_dsr_src0, data_dsr_src0, 1.1);
+  @fadds(weights_dsr_src0, weights_dsr_src0, 1.1);
+  // @fadds(other, value_dsr_src0, 1.1);
+
+
 
   @activate(exit_task_id);
 }

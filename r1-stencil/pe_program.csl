@@ -1,8 +1,9 @@
-// 1603 - 1624 -> 21 cycles
-// 1624 - 1644 -> 20 cycles
-// 1644 - 1661 -> 17 cycles
-// 1661 - 1679 -> 18 cycles
-// 1679 - 1696 -> 17 cycles
+// 1605 - 1622 -> 17 cycles
+// 1622 - 1638 -> 16 cycles
+// 1638 - 1652 -> 14 cycles
+// 1652 - 1668 -> 16 cycles
+// 1668 - 1682 -> 14 cycles
+// 1682 - 1698 -> 16 cycles
 
 
 
@@ -61,10 +62,15 @@ const zero: [1]f32 = [1]f32 {0.0};
 const weight_zero: f32 = 1.0/3.0;
 const weight_one: f32 = 1.0/6.0;
 
+// var received_data: [4]f32 = [4]f32 {0.0, 0.0, 0.0, 0.0};
+var intermediate_sum_1: [1]f32 = [1]f32 {0.0};
+var intermediate_sum_2: [1]f32 = [1]f32 {0.0};
+
 var dev_null: [1]f32;
 
 var matrix: [1]f32 = [1]f32 {0.0};
 var matrix_ptr: [*]f32 = &matrix;
+var pre_processed_matrix: [1]f32 = [1]f32 {0.0};
 
 var steps_executed: i16 = 0;
 var wait_steps: u16 = 0;
@@ -76,6 +82,7 @@ const weights_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{rank+1} -> weigh
 const matrix_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> matrix[0] });
 const zero_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> zero[0] });
 const dev_null_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> dev_null[0] });
+const pre_processed_matrix_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> pre_processed_matrix[0] });
 
 const send_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_col, .extent = 1, .output_queue = send_color_oq });
 
@@ -84,20 +91,34 @@ const recv_dsd_w = @get_dsd(fabin_dsd, .{ .fabric_color = recv_w_col, .extent = 
 const recv_dsd_n = @get_dsd(fabin_dsd, .{ .fabric_color = recv_n_col, .extent = 1, .input_queue = recv_color_iq_n});
 const recv_dsd_s = @get_dsd(fabin_dsd, .{ .fabric_color = recv_s_col, .extent = 1, .input_queue = recv_color_iq_s});
 
+// const received_data_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{4} -> received_data[i] });
+const intermediate_sum_1_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> intermediate_sum_1[0] });
+const intermediate_sum_2_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> intermediate_sum_2[0] });
+
 // DSRs
 const weights_dsr = @get_dsr(dsr_src1, 12);
 const matrix_dsr = @get_dsr(dsr_src0, 1);
-const matrix_dsr_src = @get_dsr(dsr_src1, 2);
-const matrix_dsr_dest = @get_dsr(dsr_dest, 7);
+// const matrix_dsr_src0_2 = @get_dsr(dsr_src0, 3);
+const matrix_dsr_dest = @get_dsr(dsr_dest, 3);
 const dev_null_dsr = @get_dsr(dsr_dest, 12);
+const pre_processed_matrix_dsr = @get_dsr(dsr_src1, 3);
 
 
-const send_dsr = @get_dsr(dsr_dest, 3);
+const send_dsr = @get_dsr(dsr_dest, 1);
 
-const recv_dsr_e = @get_dsr(dsr_src1, 8);
+const recv_dsr_e = @get_dsr(dsr_src0, 8);
 const recv_dsr_w = @get_dsr(dsr_src1, 9);
-const recv_dsr_n = @get_dsr(dsr_src1, 10);
+const recv_dsr_n = @get_dsr(dsr_src0, 10);
 const recv_dsr_s = @get_dsr(dsr_src1, 11);
+
+const intermediate_sum_1_dsr_dest = @get_dsr(dsr_dest, 8);
+const intermediate_sum_2_dsr_dest = @get_dsr(dsr_dest, 10);
+const intermediate_sum_1_dsr_src1 = @get_dsr(dsr_src1, 4);
+const intermediate_sum_2_dsr_src1 = @get_dsr(dsr_src1, 5);
+
+// const received_data_dsr_dest = @get_dsr(dsr_dest, 4);
+// const received_data_dsr_src0 = @get_dsr(dsr_src0, 2);
+// const received_data_dsr_src1 = @get_dsr(dsr_src1, 1);
 
 
 // function that initializes weights
@@ -112,6 +133,7 @@ fn init_weights() void {
   for (@range(i16, rank+1)) |i| {
     weights[i] /= sum;
   }
+  pre_processed_matrix[0] = matrix[0] * weights[1];
 }
 
 fn loop() void {
@@ -121,14 +143,28 @@ fn loop() void {
     if (!is_static_region){
     // add own value to result
       @fmuls(matrix_dsr, matrix_dsr, weight_zero);
-      // @fmacs(matrix_dsr, matrix_dsr, recv_dsr_e, weight_one);
-      // @fmacs(matrix_dsr, matrix_dsr, recv_dsr_w, weight_one);
-      // @fmacs(matrix_dsr, matrix_dsr, recv_dsr_n, weight_one);
-      // @fmacs(matrix_dsr, matrix_dsr, recv_dsr_s, weight_one);
-      @fadds(matrix_dsr, matrix_dsr, recv_dsr_e);
-      @fadds(matrix_dsr, matrix_dsr, recv_dsr_w);
-      @fadds(matrix_dsr, matrix_dsr, recv_dsr_n);
-      @fadds(matrix_dsr, matrix_dsr, recv_dsr_s);
+
+
+      // @fadds(matrix_dsr_dest, matrix_dsr_src0_2, recv_dsr_w);
+      // @fadds(matrix_dsr_dest, matrix_dsr_src0_2, recv_dsr_e);
+      // @fadds(matrix_dsr_dest, matrix_dsr_src0_2, recv_dsr_n);
+      // @fadds(matrix_dsr_dest, matrix_dsr_src0_2, recv_dsr_s);
+
+      @fadds(intermediate_sum_1_dsr_dest, recv_dsr_e, recv_dsr_w);
+      @fadds(intermediate_sum_2_dsr_dest, recv_dsr_n, recv_dsr_s);
+      @fadds(matrix_dsr, matrix_dsr, intermediate_sum_1_dsr_src1);
+      @fadds(matrix_dsr, matrix_dsr, intermediate_sum_2_dsr_src1);
+
+      // @fmovs(received_data_dsr_dest, recv_dsr_e);
+      // @fmovs(received_data_dsr_dest, recv_dsr_w);
+      // @fmovs(received_data_dsr_dest, recv_dsr_n);
+      // @fmovs(received_data_dsr_dest, recv_dsr_s);
+
+      // @fadds(matrix_dsr, matrix_dsr, received_data_dsr_src1);
+      // @fadds(matrix_dsr, matrix_dsr, received_data_dsr_src1);
+      // @fadds(matrix_dsr, matrix_dsr, received_data_dsr_src1);
+      // @fadds(matrix_dsr, matrix_dsr, received_data_dsr_src1);
+
     }else{
       // receive and delete data
       border_receive_data();
@@ -154,8 +190,11 @@ fn border_receive_data() void {
 
 
 fn send_to_neighbors() void {
-  // @fmovs(send_dsr, matrix_dsr_src);
-  @fmuls(send_dsr, matrix_dsd, weight_one);
+  if(is_static_region){
+    @fmovs(send_dsr, pre_processed_matrix_dsr);
+  }else{
+    @fmuls(send_dsr, matrix_dsr, weight_one);
+  }
 }
 
 // Call gemv function and send/ receive partial result y
@@ -164,6 +203,9 @@ fn compute() void {
   if (is_corner) {
     @activate(exit_task_id);
   }else{
+    if(is_static_region){
+      send_to_neighbors(); // send once more so that input queues are never empty
+    }
     loop();
   }
 }
@@ -180,9 +222,10 @@ comptime {
   // load DSDs to DSRs
   @load_to_dsr(weights_dsr, weights_dsd);
   @load_to_dsr(matrix_dsr, matrix_dsd);
-  @load_to_dsr(matrix_dsr_src, matrix_dsd);
+  // @load_to_dsr(matrix_dsr_src0_2, matrix_dsd);
   @load_to_dsr(matrix_dsr_dest, matrix_dsd);
   @load_to_dsr(dev_null_dsr, dev_null_dsd);
+  @load_to_dsr(pre_processed_matrix_dsr, pre_processed_matrix_dsd);
   
   @load_to_dsr(send_dsr, send_dsd);
 
@@ -190,6 +233,15 @@ comptime {
   @load_to_dsr(recv_dsr_w, recv_dsd_w);
   @load_to_dsr(recv_dsr_n, recv_dsd_n);
   @load_to_dsr(recv_dsr_s, recv_dsd_s);
+
+  // @load_to_dsr(received_data_dsr_dest, received_data_dsd, .{ .save_address = true});
+  // @load_to_dsr(received_data_dsr_src0, received_data_dsd, .{ .save_address = true});
+  // @load_to_dsr(received_data_dsr_src1, received_data_dsd, .{ .save_address = true});
+
+  @load_to_dsr(intermediate_sum_1_dsr_dest, intermediate_sum_1_dsd);
+  @load_to_dsr(intermediate_sum_2_dsr_dest, intermediate_sum_2_dsd);
+  @load_to_dsr(intermediate_sum_1_dsr_src1, intermediate_sum_1_dsd);
+  @load_to_dsr(intermediate_sum_2_dsr_src1, intermediate_sum_2_dsd);
 
   // On WSE-3, we must explicitly initialize input and output queues
   if (@is_arch("wse3")) {
