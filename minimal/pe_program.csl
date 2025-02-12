@@ -17,8 +17,8 @@ var weights: [size]f32 = [size]f32 {2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0
 var other_value: [1]f32 = [1]f32 {3.0};
 
 const value_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> value[0] });
-const data_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> data[i] });
-const weights_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> weights[i] });
+const data_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{10} -> data[i] });
+const weights_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{10} -> weights[i] });
 const other_value_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> other_value[0] });
 
 const value_dsr_dest = @get_dsr(dsr_dest, 1);

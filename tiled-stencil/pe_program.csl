@@ -1,89 +1,76 @@
+// params
 param memcpy_params: comptime_struct;
-param is_static_region: bool;
-param steps: i16;
+param is_border: bool;
 
-param send_col: color;
+param send_e_col: color;
+param send_w_col: color;
+param send_n_col: color;
+param send_s_col: color;
 
 param recv_e_col: color;
 param recv_w_col: color;
 param recv_n_col: color;
 param recv_s_col: color;
 
+param steps: i16;
 param row: i16;
 param col: i16;
+param pe_width: i16;
+param pe_height: i16;
+param rank: i16;
+param x_tile_size: i16;
+param y_tile_size: i16;
 
-param width: i16;
-param height: i16;
-
-
+// consts
 const sys_mod = @import_module("<memcpy/memcpy>", memcpy_params);
 
 // Queue IDs
-const send_color_oq = @get_output_queue(1);  // 0 is reserved
+const send_color_oq_e = @get_output_queue(1);  // 0 is reserved
+const send_color_oq_w = @get_output_queue(2);
+const send_color_oq_n = @get_output_queue(3);
+const send_color_oq_s = @get_output_queue(4);
 
-const recv_color_iq_e = @get_input_queue(3);  // 0 and 1 are reserved
-const recv_color_iq_w = @get_input_queue(2);
+const recv_color_iq_e = @get_input_queue(2);  // 0 and 1 are reserved
+const recv_color_iq_w = @get_input_queue(3);
 const recv_color_iq_n = @get_input_queue(4);
 const recv_color_iq_s = @get_input_queue(5);
 
 const is_corner = (col == 0 or col == width-1) and (row == 0 or row == height-1);
-
 const exit_task_id: local_task_id = @get_local_task_id(9);
 
-var weight_zero: f32 = 1.0;
-var weight_one: f32 = 0.5;
-
-var intermediate_sum_1: [1]f32;
-var intermediate_sum_2: [1]f32;
-
-var dev_null: [1]f32;
-
+var weights: [rank+1]f32 = [rank+1]f32 {1.0, 0.5, 0.25};
 var matrix: [1]f32;
 var matrix_ptr: [*]f32 = &matrix;
-var pre_processed_matrix: [1]f32;
-
 
 // DSDs
-const matrix_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> matrix[0] });
-const dev_null_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> dev_null[0] });
-const pre_processed_matrix_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> pre_processed_matrix[0] });
+// const matrix_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> matrix[0] });
+// const dev_null_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> dev_null[0] });
+// const pre_processed_matrix_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> pre_processed_matrix[0] });
 
-const send_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_col, .extent = 1, .output_queue = send_color_oq });
+// const send_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_col, .extent = 1, .output_queue = send_color_oq });
 
-const recv_dsd_e = @get_dsd(fabin_dsd, .{ .fabric_color = recv_e_col, .extent = 1, .input_queue = recv_color_iq_e});
-const recv_dsd_w = @get_dsd(fabin_dsd, .{ .fabric_color = recv_w_col, .extent = 1, .input_queue = recv_color_iq_w});
-const recv_dsd_n = @get_dsd(fabin_dsd, .{ .fabric_color = recv_n_col, .extent = 1, .input_queue = recv_color_iq_n});
-const recv_dsd_s = @get_dsd(fabin_dsd, .{ .fabric_color = recv_s_col, .extent = 1, .input_queue = recv_color_iq_s});
+// const recv_dsd_e = @get_dsd(fabin_dsd, .{ .fabric_color = recv_e_col, .extent = 1, .input_queue = recv_color_iq_e});
+// const recv_dsd_w = @get_dsd(fabin_dsd, .{ .fabric_color = recv_w_col, .extent = 1, .input_queue = recv_color_iq_w});
+// const recv_dsd_n = @get_dsd(fabin_dsd, .{ .fabric_color = recv_n_col, .extent = 1, .input_queue = recv_color_iq_n});
+// const recv_dsd_s = @get_dsd(fabin_dsd, .{ .fabric_color = recv_s_col, .extent = 1, .input_queue = recv_color_iq_s});
 
-const intermediate_sum_1_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> intermediate_sum_1[0] });
-const intermediate_sum_2_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> intermediate_sum_2[0] });
+// const intermediate_sum_1_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> intermediate_sum_1[0] });
+// const intermediate_sum_2_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> intermediate_sum_2[0] });
 
-// DSRs
-const matrix_dsr = @get_dsr(dsr_src0, 1);
-const pre_processed_matrix_dsr = @get_dsr(dsr_src1, 3);
 
-const send_dsr = @get_dsr(dsr_dest, 1);
-
-const recv_dsr_e = @get_dsr(dsr_src0, 8);
-const recv_dsr_w = @get_dsr(dsr_src1, 9);
-const recv_dsr_n = @get_dsr(dsr_src0, 10);
-const recv_dsr_s = @get_dsr(dsr_src1, 11);
-
-const intermediate_sum_1_dsr_dest = @get_dsr(dsr_dest, 8);
-const intermediate_sum_2_dsr_dest = @get_dsr(dsr_dest, 10);
-const intermediate_sum_1_dsr_src1 = @get_dsr(dsr_src1, 4);
-const intermediate_sum_2_dsr_src1 = @get_dsr(dsr_src1, 5);
 
 // function that initializes weights
 // divide weights to not have to divide in the loop
 // first weight is for center element, others are for neighbors
 // so that sum of w[0] + 4*w[1] + 4*w[2] + ... + 4*w[rank] = 1
 fn init_weights() void {
-  var sum: f32 = weight_zero + 4.0 * weight_one;
-  weight_zero /= sum;
-  weight_one /= sum;
-  
-  pre_processed_matrix[0] = matrix[0] * weight_one;
+  var sum: f32 = 0.0;
+  for (@range(i16, rank+1)) |i| {
+    sum += if (i == 0) weights[i] else 4.0*weights[i];
+  }
+  for (@range(i16, rank+1)) |i| {
+    weights[i] /= sum;
+  }
 }
 
 fn loop() void {
@@ -146,22 +133,6 @@ task exit_task() void {
 comptime {
   // When exit_task_id is activated, exit_task will execute
   @bind_local_task(exit_task, exit_task_id);
-
-  // load DSDs to DSRs
-  @load_to_dsr(matrix_dsr, matrix_dsd);
-  @load_to_dsr(pre_processed_matrix_dsr, pre_processed_matrix_dsd);
-  
-  @load_to_dsr(send_dsr, send_dsd);
-
-  @load_to_dsr(recv_dsr_e, recv_dsd_e);
-  @load_to_dsr(recv_dsr_w, recv_dsd_w);
-  @load_to_dsr(recv_dsr_n, recv_dsd_n);
-  @load_to_dsr(recv_dsr_s, recv_dsd_s);
-
-  @load_to_dsr(intermediate_sum_1_dsr_dest, intermediate_sum_1_dsd);
-  @load_to_dsr(intermediate_sum_2_dsr_dest, intermediate_sum_2_dsd);
-  @load_to_dsr(intermediate_sum_1_dsr_src1, intermediate_sum_1_dsd);
-  @load_to_dsr(intermediate_sum_2_dsr_src1, intermediate_sum_2_dsd);
 
   // On WSE-3, we must explicitly initialize input and output queues
   if (@is_arch("wse3")) {
