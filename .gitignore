@@ -5,3 +5,7 @@
 */wio_flows_tmpdir.*
 .history
 debug
+*.pyc
+*/wio_flow.json
+*/sim_stats.json
+*/simconfig.json

@@ -1,0 +1,78 @@
+// matrix dimensions on each PE
+param w: i16;
+param h: i16;
+param steps: i16;
+
+const rank: i16 = 1;
+
+const memcpy = @import_module("<memcpy/get_params>", .{
+  .width = w,
+  .height = h,
+});
+
+
+fn get_color(col: i16, row: i16) i16 {
+  return ((col + ((row/2) % 2)) % 3) + (row % 2)*3;
+}
+
+layout {
+  // Colors
+  var cols: [6]color = @constants([6]color, @get_color(0));
+
+  for (@range(i16, 6)) |i| {
+    cols[i] = @get_color(i+1);
+  }
+
+
+  // PE coordinates are (column, row)
+  @set_rectangle(w, h);
+
+  for (@range(i16, w)) |col| {
+    for (@range(i16, h)) |row| {
+
+      const is_static_region: bool = col<rank or row<rank or col>=w-rank or row>=h-rank;
+
+      const send_col = cols[get_color(col, row)];
+      const recv_e_col = cols[get_color(col+1, row)];
+      const recv_w_col = cols[get_color(col+2, row)];
+      const recv_n_col = cols[get_color(col, row+3)];
+      const recv_s_col = cols[get_color(col, row+1)];
+
+
+      @set_tile_code(col, row, "pe_program.csl", .{
+        .memcpy_params = memcpy.get_params(col),
+        .is_static_region = is_static_region,
+        .send_col = send_col,
+        .recv_e_col = recv_e_col,
+        .recv_w_col = recv_w_col,
+        .recv_n_col = recv_n_col,
+        .recv_s_col = recv_s_col,
+        .steps = steps,
+        .row = row,
+        .col = col,
+        .width = w,
+        .height = h,
+      });
+
+      if (col == 0) {
+        @set_color_config(col, row, send_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
+      } else if (col == w-1) {
+        @set_color_config(col, row, send_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
+      } else if (row == 0) {
+        @set_color_config(col, row, send_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{SOUTH} }});
+      } else if (row == h-1) {
+        @set_color_config(col, row, send_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{NORTH} }});
+      } else {
+        @set_color_config(col, row, send_col, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST, WEST, NORTH, SOUTH} }});
+      }
+      @set_color_config(col, row, recv_e_col, .{.routes = .{ .rx = .{EAST}, .tx = .{RAMP} }});
+      @set_color_config(col, row, recv_w_col, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
+      @set_color_config(col, row, recv_n_col, .{.routes = .{ .rx = .{NORTH}, .tx = .{RAMP} }});
+      @set_color_config(col, row, recv_s_col, .{.routes = .{ .rx = .{SOUTH}, .tx = .{RAMP} }});
+    }
+  }
+
+  // export symbol names
+  @export_name("matrix", [*]f32, true);
+  @export_name("compute", fn()void);
+}
