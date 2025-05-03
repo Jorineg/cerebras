@@ -43,13 +43,13 @@ var own_values: [tile_height, tile_width]f32;
 var buffer: [tile_height + 2*rank, tile_width + 2*rank]f32;
 
 // pointers
-const weights_ptr = &weights;
-const own_values_ptr = &own_values;
+var weights_ptr = &weights;
+var own_values_ptr = &own_values;
 
 // mem DSDs
 const all_buffer_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height + 2*rank, tile_width + 2*rank} -> buffer[i, j] });
 const buffer_center_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + i, rank + j] });
-const own_values_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{tile_height*tile_width} -> own_values[i] });
+const own_values_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> own_values[i, j] });
 
 const own_values_send_north_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{rank, tile_width} -> own_values[i, j] });
 const own_values_send_south_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{rank, tile_width} -> own_values[tile_height - rank + i, j] });
@@ -81,7 +81,7 @@ const recv_east_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_e_col, .extent
 
 
 fn init_buffer_shift_dsd_arrays() void {
-  for (0..rank) |k| {
+  for (@range(i16, rank)) |k| {
     var shift = k+1;
     buffer_shift_up_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank - shift + i, rank + j] });
     buffer_shift_down_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + shift + i, rank + j] });
@@ -114,12 +114,12 @@ fn loop() void {
   send_to_neighbors();
 
   //receive data from all directions and store in buffer
-  receive_from_neighbours();
+  receive_from_neighbors();
 
   // multiply own_values with weights[0]
   @fmuls(own_values_dsd, own_values_dsd, weights[0]);
 
-  for (1..rank) |i| {
+  for (@range(i16, 1, rank, 1)) |i| {
     const weight: f32 = if (i == 1) weights[i] else weights[i]/weights[i-1];
     
     // multiply buffer with weight
@@ -136,38 +136,38 @@ fn loop() void {
 
 fn send_to_neighbors() void {
   // send west
-  if(!col == 0){
+  if(col != 0){
     @fmovs(send_west_dsd, own_values_send_west_dsd);
   }
   //send east
-  if(!col == pe_width-1){
+  if(col != pe_width-1){
     @fmovs(send_east_dsd, own_values_send_east_dsd);
   }
   // send north
-  if(!col == 0){
+  if(row != 0){
     @fmovs(send_north_dsd, own_values_send_north_dsd);
   }
   // send south
-  if(!col == pe_height-1){
+  if(row != pe_height-1){
     @fmovs(send_south_dsd, own_values_send_south_dsd);
   }
 }
 
 fn receive_from_neighbors() void {
   // receive west
-  if(!col == 0){
+  if(col != 0){
     @fmovs(buffer_recv_west_dsd, recv_west_dsd);
   }
   //send east
-  if(!col == pe_width-1){
+  if(col != pe_width-1){
     @fmovs(buffer_recv_east_dsd, recv_east_dsd);
   }
   // send north
-  if(!col == 0){
+  if(row != 0){
     @fmovs(buffer_recv_north_dsd, recv_north_dsd);
   }
   // send south
-  if(!col == pe_height-1){
+  if(row != pe_height-1){
     @fmovs(buffer_recv_south_dsd, recv_south_dsd);
   }
 }
@@ -175,7 +175,7 @@ fn receive_from_neighbors() void {
 
 fn compute() void {
   init_weights();
-  for (0..num_iterations) |i| {
+  for (@range(i16, num_iterations)) |i| {
     loop();
   }
   @activate(exit_task_id);
