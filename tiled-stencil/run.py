@@ -62,6 +62,25 @@ weights_symbol = runner.get_id("weights")
 runner.load()
 runner.run()
 
+# repeat weights for each PE
+pe_weights = np.repeat(WEIGHTS, num_pe_x * num_pe_y).astype(np.float32)
+
+# copy weights to device
+runner.memcpy_h2d(
+    weights_symbol,
+    pe_weights,
+    0,
+    0,
+    num_pe_x,
+    num_pe_y,
+    len(WEIGHTS),
+    streaming=False,
+    order=MemcpyOrder.ROW_MAJOR,
+    data_type=MemcpyDataType.MEMCPY_32BIT,
+    nonblock=False,
+)
+print("copied weights to device")
+
 def tile_matrix(m, tile_width, tile_height, num_x_tiles, num_y_tiles):
     reshaped = m.reshape(num_y_tiles, tile_height, num_x_tiles, tile_width)
     swapped = reshaped.swapaxes(1, 2)

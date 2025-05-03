@@ -113,7 +113,7 @@ layout {
   }
 
   // export symbol names
-  @export_name("values", *[tile_width, tile_height]f32, true);
+  @export_name("values", *[tile_height, tile_width]f32, true);
   @export_name("weights", *[rank+1]f32, true);
   @export_name("compute", fn()void);
 }
