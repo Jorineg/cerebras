@@ -1,6 +1,6 @@
 #!/usr/bin/env cs_python
 
-WEIGHTS = [1.0, 0.5]
+WEIGHTS = [1.0, 0.5, 0.25]
 
 import argparse
 import json
@@ -27,9 +27,17 @@ with open(f"{args.name}/out.json", encoding="utf-8") as json_file:
 # Matrix dimensions
 width = int(compile_data["params"]["w"])
 height = int(compile_data["params"]["h"])
-num_steps = int(compile_data["params"]["steps"])
+tile_width = int(compile_data["params"]["tile_width"])
+tile_height = int(compile_data["params"]["tile_height"])
+rank = int(compile_data["params"]["rank"])
+num_iterations = int(compile_data["params"]["num_iterations"])
+num_pe_x = width // tile_width
+num_pe_y = height // tile_height
 
-print(f"Using matrix of size {width}x{height} for {num_steps} steps")
+print(f"Using matrix of size {width}x{height} for {num_iterations} iterations")
+print(f"Tile size: {tile_width}x{tile_height}")
+print(f"Rank: {rank}")
+print(f"Number of PEs: {num_pe_x}x{num_pe_y}")
 
 # Create random matrix with integers of size (width, height)
 matrix = np.random.randint(0, 10, (height, width)).astype(np.float32)
@@ -38,7 +46,7 @@ matrix = np.random.randint(0, 10, (height, width)).astype(np.float32)
 print_matrix(matrix, "Original Matrix")
 
 # Run the stencil computation
-result_expected = star_stencil(matrix, WEIGHTS, num_steps)
+result_expected = star_stencil(matrix, WEIGHTS, num_iterations)
 
 # Print the result
 print_matrix(result_expected, "Result Matrix (python computation)")
@@ -47,7 +55,8 @@ print_matrix(result_expected, "Result Matrix (python computation)")
 runner = SdkRuntime(args.name, cmaddr=args.cmaddr)
 
 # Get symbols on device
-matrix_symbol = runner.get_id("matrix")
+matrix_symbol = runner.get_id("values")
+weights_symbol = runner.get_id("weights")
 
 # Load and run the program
 runner.load()
@@ -62,9 +71,9 @@ runner.memcpy_h2d(
     device_matrix,
     0,
     0,
-    width,
-    height,
-    1,
+    num_pe_x,
+    num_pe_y,
+    tile_width * tile_height,
     streaming=False,
     order=MemcpyOrder.ROW_MAJOR,
     data_type=MemcpyDataType.MEMCPY_32BIT,
@@ -85,9 +94,9 @@ runner.memcpy_d2h(
     matrix_symbol,
     0,
     0,
-    width,
-    height,
-    1,
+    num_pe_x,
+    num_pe_y,
+    tile_width * tile_height,
     streaming=False,
     order=MemcpyOrder.ROW_MAJOR,
     data_type=MemcpyDataType.MEMCPY_32BIT,

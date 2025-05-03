@@ -1,16 +1,16 @@
-param w: i16;             // width of underlying grid
-param h: i16;             // height of underlying grid
-param x_tile_size: i16;   // width of each tile in x direction
-param y_tile_size: i16;   // height of each tile in y direction
+param w: i16;             // width of matrix to perform stencil on
+param h: i16;             // height of matrix to perform stencil on
+param tile_width: i16;   // width of each tile in x direction
+param tile_height: i16;   // height of each tile in y direction
 param rank: i16;          // rank of the stencil
-param steps: i16;         // number of steps to run the stencil
+param num_iterations: i16;         // number of iterations to run the stencil
 
-// rank must be smaller or equal to the min(x_tile_size, y_tile_size)
-// acutal number of PEs is given by w/x_tile_size * h/y_tile_size
-// w must be a multiple of x_tile_size and h must be a multiple of y_tile_size
+// rank must be smaller or equal to the min(tile_width, tile_height)
+// acutal number of PEs is given by w/tile_width * h/tile_height
+// w must be a multiple of tile_width and h must be a multiple of tile_height
 
-const num_pe_x = w / x_tile_size;
-const num_pe_y = h / y_tile_size;
+const num_pe_x = w / tile_width;
+const num_pe_y = h / tile_height;
 
 // Colors
 const e_to_w_col_1: color = @get_color(1);
@@ -29,10 +29,10 @@ const memcpy = @import_module("<memcpy/get_params>", .{
 });
 
 fn validate_parameters() void {
-  @comptime_assert(w % x_tile_size == 0, "w must be a multiple of x_tile_size");
-  @comptime_assert(h % y_tile_size == 0, "h must be a multiple of y_tile_size");
-  @comptime_assert(rank <= x_tile_size, "rank must be smaller or equal to x_tile_size");
-  @comptime_assert(rank <= y_tile_size, "rank must be smaller or equal to y_tile_size");
+  @comptime_assert(w % tile_width == 0, "w must be a multiple of tile_width");
+  @comptime_assert(h % tile_height == 0, "h must be a multiple of tile_height");
+  @comptime_assert(rank <= tile_width, "rank must be smaller or equal to tile_width");
+  @comptime_assert(rank <= tile_height, "rank must be smaller or equal to tile_height");
 }
 
 layout {
@@ -48,14 +48,14 @@ layout {
       var basic_params = .{
         .memcpy_params = memcpy.get_params(col),
         .is_border = is_static_region,
-        .steps = steps,
+        .num_iterations = num_iterations,
         .row = row,
         .col = col,
         .pe_width = num_pe_x,
         .pe_height = num_pe_y,
         .rank = rank,
-        .x_tile_size = x_tile_size,
-        .y_tile_size = y_tile_size,
+        .tile_width = tile_width,
+        .tile_height = tile_height,
       };
 
       var color_params;
@@ -73,28 +73,6 @@ layout {
           .recv_s_col = s_to_n_col_2,
         };
 
-        @set_color_config(col, row, e_to_w_col_1, .{.routes = .{ .rx = .{EAST}, .tx = .{RAMP} }});
-        @set_color_config(col, row, w_to_e_col_1, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
-        @set_color_config(col, row, n_to_s_col_1, .{.routes = .{ .rx = .{NORTH}, .tx = .{RAMP} }});
-        @set_color_config(col, row, s_to_n_col_1, .{.routes = .{ .rx = .{SOUTH}, .tx = .{RAMP} }});
-
-        @set_color_config(col, row, e_to_w_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
-        @set_color_config(col, row, w_to_e_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
-        @set_color_config(col, row, n_to_s_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{SOUTH} }});
-        @set_color_config(col, row, s_to_n_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{NORTH} }});
-
-      }else{
-        color_params = .{
-          .send_e_col = e_to_w_col_1,
-          .send_w_col = w_to_e_col_1,
-          .send_n_col = n_to_s_col_1,
-          .send_s_col = s_to_n_col_1,
-          .recv_e_col = w_to_e_col_2,
-          .recv_w_col = e_to_w_col_2,
-          .recv_n_col = s_to_n_col_2,
-          .recv_s_col = n_to_s_col_2,
-        };
-
         @set_color_config(col, row, e_to_w_col_1, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
         @set_color_config(col, row, w_to_e_col_1, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
         @set_color_config(col, row, n_to_s_col_1, .{.routes = .{ .rx = .{RAMP}, .tx = .{SOUTH} }});
@@ -104,6 +82,28 @@ layout {
         @set_color_config(col, row, w_to_e_col_2, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
         @set_color_config(col, row, n_to_s_col_2, .{.routes = .{ .rx = .{NORTH}, .tx = .{RAMP} }});
         @set_color_config(col, row, s_to_n_col_2, .{.routes = .{ .rx = .{SOUTH}, .tx = .{RAMP} }});
+
+      }else{
+        color_params = .{
+          .send_e_col = w_to_e_col_2,
+          .send_w_col = e_to_w_col_2,
+          .send_n_col = s_to_n_col_2,
+          .send_s_col = n_to_s_col_2,
+          .recv_e_col = w_to_e_col_1,
+          .recv_w_col = e_to_w_col_1,
+          .recv_n_col = s_to_n_col_1,
+          .recv_s_col = n_to_s_col_1,
+        };
+
+        @set_color_config(col, row, e_to_w_col_1, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
+        @set_color_config(col, row, w_to_e_col_1, .{.routes = .{ .rx = .{EAST}, .tx = .{RAMP} }});
+        @set_color_config(col, row, n_to_s_col_1, .{.routes = .{ .rx = .{SOUTH}, .tx = .{RAMP} }});
+        @set_color_config(col, row, s_to_n_col_1, .{.routes = .{ .rx = .{NORTH}, .tx = .{RAMP} }});
+
+        @set_color_config(col, row, e_to_w_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
+        @set_color_config(col, row, w_to_e_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
+        @set_color_config(col, row, n_to_s_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{SOUTH} }});
+        @set_color_config(col, row, s_to_n_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{NORTH} }});
       }
 
       var params = @concat_structs(basic_params, color_params);

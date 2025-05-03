@@ -12,14 +12,14 @@ param recv_w_col: color;
 param recv_n_col: color;
 param recv_s_col: color;
 
-param steps: i16;
+param num_iterations: i16;
 param row: i16;
 param col: i16;
 param pe_width: i16;
 param pe_height: i16;
 param rank: i16;
-param x_tile_size: i16;
-param y_tile_size: i16;
+param tile_width: i16;
+param tile_height: i16;
 
 // consts
 const sys_mod = @import_module("<memcpy/memcpy>", memcpy_params);
@@ -38,25 +38,57 @@ const recv_color_iq_s = @get_input_queue(5);
 const is_corner = (col == 0 or col == width-1) and (row == 0 or row == height-1);
 const exit_task_id: local_task_id = @get_local_task_id(9);
 
-var weights: [rank+1]f32 = [rank+1]f32 {1.0, 0.5, 0.25};
-var matrix: [1]f32;
-var matrix_ptr: [*]f32 = &matrix;
+var weights: [rank+1]f32;
+var own_values: [tile_height, tile_width]f32;
+var buffer: [tile_height + 2*rank, tile_width + 2*rank]f32;
 
-// DSDs
-// const matrix_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> matrix[0] });
-// const dev_null_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> dev_null[0] });
-// const pre_processed_matrix_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> pre_processed_matrix[0] });
+// pointers
+const weights_ptr = &weights;
+const own_values_ptr = &own_values;
 
-// const send_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_col, .extent = 1, .output_queue = send_color_oq });
+// mem DSDs
+const all_buffer_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height + 2*rank, tile_width + 2*rank} -> buffer[i, j] });
+const buffer_center_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + i, rank + j] });
+const own_values_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{tile_height*tile_width} -> own_values[i] });
 
-// const recv_dsd_e = @get_dsd(fabin_dsd, .{ .fabric_color = recv_e_col, .extent = 1, .input_queue = recv_color_iq_e});
-// const recv_dsd_w = @get_dsd(fabin_dsd, .{ .fabric_color = recv_w_col, .extent = 1, .input_queue = recv_color_iq_w});
-// const recv_dsd_n = @get_dsd(fabin_dsd, .{ .fabric_color = recv_n_col, .extent = 1, .input_queue = recv_color_iq_n});
-// const recv_dsd_s = @get_dsd(fabin_dsd, .{ .fabric_color = recv_s_col, .extent = 1, .input_queue = recv_color_iq_s});
+const own_values_send_north_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{rank, tile_width} -> own_values[i, j] });
+const own_values_send_south_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{rank, tile_width} -> own_values[tile_height - rank + i, j] });
+const own_values_send_west_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, rank} -> own_values[i, j] });
+const own_values_send_east_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, rank} -> own_values[i, tile_width - rank + j] });
 
-// const intermediate_sum_1_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> intermediate_sum_1[0] });
-// const intermediate_sum_2_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> intermediate_sum_2[0] });
+const buffer_recv_north_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{rank, tile_width} -> buffer[i, rank + j] });
+const buffer_recv_south_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{rank, tile_width} -> buffer[tile_height + rank + i, rank + j] });
+const buffer_recv_west_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, rank} -> buffer[rank + i, j] });
+const buffer_recv_east_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, rank} -> buffer[rank + i, tile_width + rank + j] });
 
+var buffer_shift_up_center_dsd_array: [rank]mem4d_dsd;
+var buffer_shift_down_center_dsd_array: [rank]mem4d_dsd;
+var buffer_shift_left_center_dsd_array: [rank]mem4d_dsd;
+var buffer_shift_right_center_dsd_array: [rank]mem4d_dsd;
+
+
+// communication DSDs
+const send_north_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_n_col, .extent = tile_width*rank, .output_queue = send_color_oq_n });
+const send_south_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_s_col, .extent = tile_width*rank, .output_queue = send_color_oq_s });
+const send_west_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_w_col, .extent = tile_height*rank, .output_queue = send_color_oq_w });
+const send_east_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_e_col, .extent = tile_height*rank, .output_queue = send_color_oq_e });
+
+const recv_north_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_n_col, .extent = tile_width*rank, .input_queue = recv_color_iq_n });
+const recv_south_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_s_col, .extent = tile_width*rank, .input_queue = recv_color_iq_s });
+const recv_west_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_w_col, .extent = tile_height*rank, .input_queue = recv_color_iq_w });
+const recv_east_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_e_col, .extent = tile_height*rank, .input_queue = recv_color_iq_e });
+
+
+
+fn init_buffer_shift_dsd_arrays() void {
+  for (0..rank) |k| {
+    var shift = k+1;
+    buffer_shift_up_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank - shift + i, rank + j] });
+    buffer_shift_down_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + shift + i, rank + j] });
+    buffer_shift_left_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + i, rank - shift + j] });
+    buffer_shift_right_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + i, rank + shift + j] });
+  }
+}
 
 
 // function that initializes weights
@@ -73,56 +105,80 @@ fn init_weights() void {
   }
 }
 
+
 fn loop() void {
-  for (@range(i16, steps)) |i| {
-    send_to_neighbors();
-    if (!is_static_region){
-      @fmuls(matrix_dsr, matrix_dsr, weight_zero);
+  // copy own_values to buffer
+  @fmovs(own_values_dsd, buffer_center_dsd);
 
-      @fadds(intermediate_sum_1_dsr_dest, recv_dsr_e, recv_dsr_w);
-      @fadds(intermediate_sum_2_dsr_dest, recv_dsr_n, recv_dsr_s);
-      @fadds(matrix_dsr, matrix_dsr, intermediate_sum_1_dsr_src1);
-      @fadds(matrix_dsr, matrix_dsr, intermediate_sum_2_dsr_src1);
-    }else{
-      border_receive_data();
-    }
-  }
-  @activate(exit_task_id);
-}
+  // send cropped own_values to neighbors
+  send_to_neighbors();
 
+  //receive data from all directions and store in buffer
+  receive_from_neighbours();
 
-fn border_receive_data() void {
-  if (col == 0) {
-    @fmovs(dev_null_dsd, recv_dsd_e);
-  }else if (col == width-1) {
-    @fmovs(dev_null_dsd, recv_dsd_w);
-  }else if (row == 0) {
-    @fmovs(dev_null_dsd, recv_dsd_s);
-  }else if (row == height-1) {
-    @fmovs(dev_null_dsd, recv_dsd_n);
+  // multiply own_values with weights[0]
+  @fmuls(own_values_dsd, own_values_dsd, weights[0]);
+
+  for (1..rank) |i| {
+    const weight: f32 = if (i == 1) weights[i] else weights[i]/weights[i-1];
+    
+    // multiply buffer with weight
+    @fmuls(all_buffer_dsd, all_buffer_dsd, weight);
+
+    // add buffer shifted up/down/left/right by i cells to own_values
+    @fadds(own_values_dsd, own_values_dsd, buffer_shift_up_center_dsd_array[i-1]);
+    @fadds(own_values_dsd, own_values_dsd, buffer_shift_down_center_dsd_array[i-1]);
+    @fadds(own_values_dsd, own_values_dsd, buffer_shift_left_center_dsd_array[i-1]);
+    @fadds(own_values_dsd, own_values_dsd, buffer_shift_right_center_dsd_array[i-1]);
   }
 }
 
 
 fn send_to_neighbors() void {
-  if(is_static_region){
-    @fmovs(send_dsr, pre_processed_matrix_dsr);
-  }else{
-    @fmuls(send_dsr, matrix_dsr, weight_one);
+  // send west
+  if(!col == 0){
+    @fmovs(send_west_dsd, own_values_send_west_dsd);
+  }
+  //send east
+  if(!col == pe_width-1){
+    @fmovs(send_east_dsd, own_values_send_east_dsd);
+  }
+  // send north
+  if(!col == 0){
+    @fmovs(send_north_dsd, own_values_send_north_dsd);
+  }
+  // send south
+  if(!col == pe_height-1){
+    @fmovs(send_south_dsd, own_values_send_south_dsd);
+  }
+}
+
+fn receive_from_neighbors() void {
+  // receive west
+  if(!col == 0){
+    @fmovs(buffer_recv_west_dsd, recv_west_dsd);
+  }
+  //send east
+  if(!col == pe_width-1){
+    @fmovs(buffer_recv_east_dsd, recv_east_dsd);
+  }
+  // send north
+  if(!col == 0){
+    @fmovs(buffer_recv_north_dsd, recv_north_dsd);
+  }
+  // send south
+  if(!col == pe_height-1){
+    @fmovs(buffer_recv_south_dsd, recv_south_dsd);
   }
 }
 
 
 fn compute() void {
   init_weights();
-  if (is_corner) {
-    @activate(exit_task_id);
-  }else{
-    if(is_static_region){
-      send_to_neighbors(); // send once more so that input queues are never empty
-    }
+  for (0..num_iterations) |i| {
     loop();
   }
+  @activate(exit_task_id);
 }
 
 
@@ -136,7 +192,10 @@ comptime {
 
   // On WSE-3, we must explicitly initialize input and output queues
   if (@is_arch("wse3")) {
-    @initialize_queue(send_color_oq, .{ .color = send_col });
+    @initialize_queue(send_color_oq_e, .{ .color = send_e_col });
+    @initialize_queue(send_color_oq_w, .{ .color = send_w_col });
+    @initialize_queue(send_color_oq_n, .{ .color = send_n_col });
+    @initialize_queue(send_color_oq_s, .{ .color = send_s_col });
 
     @initialize_queue(recv_color_iq_e, .{ .color = recv_e_col });
     @initialize_queue(recv_color_iq_w, .{ .color = recv_w_col });
@@ -152,7 +211,8 @@ comptime {
     @initialize_queue(recv_color_iq_s, .{ .color = recv_s_col });
   }
 
-  @export_symbol(matrix_ptr, "matrix");
+  @export_symbol(own_values_ptr, "values");
+  @export_symbol(weights_ptr, "weights");
   @export_symbol(compute);
   
 }
