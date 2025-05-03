@@ -61,10 +61,12 @@ const buffer_recv_south_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{ran
 const buffer_recv_west_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, rank} -> buffer[rank + i, j] });
 const buffer_recv_east_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, rank} -> buffer[rank + i, tile_width + rank + j] });
 
-var buffer_shift_up_center_dsd_array: [rank]mem4d_dsd;
-var buffer_shift_down_center_dsd_array: [rank]mem4d_dsd;
-var buffer_shift_left_center_dsd_array: [rank]mem4d_dsd;
-var buffer_shift_right_center_dsd_array: [rank]mem4d_dsd;
+// var buffer_shift_up_center_dsd_array: [rank]mem4d_dsd;
+// var buffer_shift_down_center_dsd_array: [rank]mem4d_dsd;
+// var buffer_shift_left_center_dsd_array: [rank]mem4d_dsd;
+// var buffer_shift_right_center_dsd_array: [rank]mem4d_dsd;
+
+const buffer_shift_center_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + i, rank + j] });
 
 
 // communication DSDs
@@ -80,15 +82,16 @@ const recv_east_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_e_col, .extent
 
 
 
-fn init_buffer_shift_dsd_arrays() void {
-  for (@range(i16, rank)) |k| {
-    var shift = k+1;
-    buffer_shift_up_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank - shift + i, rank + j] });
-    buffer_shift_down_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + shift + i, rank + j] });
-    buffer_shift_left_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + i, rank - shift + j] });
-    buffer_shift_right_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + i, rank + shift + j] });
-  }
-}
+// fn init_buffer_shift_dsd_arrays() void {
+//   for (@range(i16, rank)) |k| {
+//     var shift = k+1;
+//     buffer_shift_up_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank - shift + i, rank + j] });
+//     buffer_shift_down_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + shift + i, rank + j] });
+//     buffer_shift_left_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + i, rank - shift + j] });
+//     buffer_shift_right_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + i, rank + shift + j] });
+//   }
+// }
+
 
 
 // function that initializes weights
@@ -108,13 +111,18 @@ fn init_weights() void {
 
 fn loop() void {
   // copy own_values to buffer
-  @fmovs(own_values_dsd, buffer_center_dsd);
+  @fmovs(buffer_center_dsd, own_values_dsd);
 
   // send cropped own_values to neighbors
   send_to_neighbors();
 
   //receive data from all directions and store in buffer
   receive_from_neighbors();
+
+  // if is_border is true: return
+  if (is_border) {
+    return;
+  }
 
   // multiply own_values with weights[0]
   @fmuls(own_values_dsd, own_values_dsd, weights[0]);
@@ -125,11 +133,17 @@ fn loop() void {
     // multiply buffer with weight
     @fmuls(all_buffer_dsd, all_buffer_dsd, weight);
 
-    // add buffer shifted up/down/left/right by i cells to own_values
-    @fadds(own_values_dsd, own_values_dsd, buffer_shift_up_center_dsd_array[i-1]);
-    @fadds(own_values_dsd, own_values_dsd, buffer_shift_down_center_dsd_array[i-1]);
-    @fadds(own_values_dsd, own_values_dsd, buffer_shift_left_center_dsd_array[i-1]);
-    @fadds(own_values_dsd, own_values_dsd, buffer_shift_right_center_dsd_array[i-1]);
+    // create shifted dsds
+    var up_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, i*(tile_width+2*rank), f32);
+    var down_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, -i*(tile_width+2*rank), f32);
+    var left_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, -i, f32);
+    var right_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, i, f32);
+    
+    // add shifted dsds to own_values
+    @fadds(own_values_dsd, own_values_dsd, up_shift_dsd);
+    @fadds(own_values_dsd, own_values_dsd, down_shift_dsd);
+    @fadds(own_values_dsd, own_values_dsd, left_shift_dsd);
+    @fadds(own_values_dsd, own_values_dsd, right_shift_dsd);
   }
 }
 
@@ -158,15 +172,15 @@ fn receive_from_neighbors() void {
   if(col != 0){
     @fmovs(buffer_recv_west_dsd, recv_west_dsd);
   }
-  //send east
+  //receive east
   if(col != pe_width-1){
     @fmovs(buffer_recv_east_dsd, recv_east_dsd);
   }
-  // send north
+  // receive north
   if(row != 0){
     @fmovs(buffer_recv_north_dsd, recv_north_dsd);
   }
-  // send south
+  // receive south
   if(row != pe_height-1){
     @fmovs(buffer_recv_south_dsd, recv_south_dsd);
   }

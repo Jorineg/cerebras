@@ -1,6 +1,6 @@
 #!/usr/bin/env cs_python
 
-WEIGHTS = [1.0, 0.5, 0.25]
+WEIGHTS = [1.0, 0.5]
 
 import argparse
 import json

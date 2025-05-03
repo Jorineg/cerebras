@@ -90,19 +90,19 @@ layout {
           .send_w_col = e_to_w_col_2,
           .send_n_col = s_to_n_col_2,
           .send_s_col = n_to_s_col_2,
-          .recv_e_col = w_to_e_col_1,
-          .recv_w_col = e_to_w_col_1,
-          .recv_n_col = s_to_n_col_1,
-          .recv_s_col = n_to_s_col_1,
+          .recv_e_col = e_to_w_col_1,
+          .recv_w_col = w_to_e_col_1,
+          .recv_n_col = n_to_s_col_1,
+          .recv_s_col = s_to_n_col_1,
         };
 
         var params = @concat_structs(basic_params, color_params);
         @set_tile_code(col, row, "pe_program.csl", params);
 
-        @set_color_config(col, row, e_to_w_col_1, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
-        @set_color_config(col, row, w_to_e_col_1, .{.routes = .{ .rx = .{EAST}, .tx = .{RAMP} }});
-        @set_color_config(col, row, n_to_s_col_1, .{.routes = .{ .rx = .{SOUTH}, .tx = .{RAMP} }});
-        @set_color_config(col, row, s_to_n_col_1, .{.routes = .{ .rx = .{NORTH}, .tx = .{RAMP} }});
+        @set_color_config(col, row, e_to_w_col_1, .{.routes = .{ .rx = .{EAST}, .tx = .{RAMP} }});
+        @set_color_config(col, row, w_to_e_col_1, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
+        @set_color_config(col, row, n_to_s_col_1, .{.routes = .{ .rx = .{NORTH}, .tx = .{RAMP} }});
+        @set_color_config(col, row, s_to_n_col_1, .{.routes = .{ .rx = .{SOUTH}, .tx = .{RAMP} }});
 
         @set_color_config(col, row, e_to_w_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
         @set_color_config(col, row, w_to_e_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
