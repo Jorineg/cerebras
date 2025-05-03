@@ -62,8 +62,18 @@ weights_symbol = runner.get_id("weights")
 runner.load()
 runner.run()
 
+def tile_matrix(m, tile_width, tile_height, num_x_tiles, num_y_tiles):
+    reshaped = m.reshape(num_y_tiles, tile_height, num_x_tiles, tile_width)
+    swapped = reshaped.swapaxes(1, 2)
+    return swapped.flatten()
+
+def untile_matrix(m, tile_width, tile_height, num_x_tiles, num_y_tiles):
+    reshaped = m.reshape(num_y_tiles, num_x_tiles, tile_height, tile_width)
+    swapped = reshaped.swapaxes(1, 2)
+    return swapped.reshape(num_y_tiles * tile_height, num_x_tiles * tile_width)
+
 # data must be one-dimensional so flatten the matrix
-device_matrix = matrix.flatten()
+device_matrix = tile_matrix(matrix, tile_width, tile_height, num_pe_x, num_pe_y)
 
 # Copy matrix into matrix of PEs (0, 0) and y of PE (1, 0)
 runner.memcpy_h2d(
@@ -104,7 +114,7 @@ runner.memcpy_d2h(
 )
 
 # reshape the result
-result = result.reshape(height, width)
+result = untile_matrix(result, tile_width, tile_height, num_pe_x, num_pe_y)
 
 print("copied result from device")
 
