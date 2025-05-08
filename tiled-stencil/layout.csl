@@ -7,10 +7,19 @@ param num_iterations: i16;         // number of iterations to run the stencil
 
 // rank must be smaller or equal to the min(tile_width, tile_height)
 // acutal number of PEs is given by w/tile_width * h/tile_height
-// w must be a multiple of tile_width and h must be a multiple of tile_height
+// w-2 must be a multiple of tile_width and h-2 must be a multiple of tile_height
 
-const num_pe_x = w / tile_width;
-const num_pe_y = h / tile_height;
+// Calculate dimensions of the core computational region (original matrix excluding rank-1 border)
+const w_compute_region = w - 2 * (rank - 1);
+const h_compute_region = h - 2 * (rank - 1);
+
+// Number of inner PEs (those that perform computation)
+const num_pe_x_inner = w_compute_region / tile_width;
+const num_pe_y_inner = h_compute_region / tile_height;
+
+// Total number of PEs including the border PEs
+const num_pe_x = num_pe_x_inner + 2;
+const num_pe_y = num_pe_y_inner + 2;
 
 // Colors
 const e_to_w_col_1: color = @get_color(1);
@@ -22,15 +31,19 @@ const n_to_s_col_2: color = @get_color(6);
 const s_to_n_col_1: color = @get_color(7);
 const s_to_n_col_2: color = @get_color(8);
 
-
 const memcpy = @import_module("<memcpy/get_params>", .{
   .width = num_pe_x,
   .height = num_pe_y,
 });
 
 fn validate_parameters() void {
-  @comptime_assert(w % tile_width == 0, "w must be a multiple of tile_width");
-  @comptime_assert(h % tile_height == 0, "h must be a multiple of tile_height");
+  @comptime_assert(rank >= 1, "Rank must be at least 1.");
+  @comptime_assert(w >= 2 * (rank -1) + tile_width, "w too small for rank and tile_width. Must be at least 2*(rank-1) + tile_width.");
+  @comptime_assert(h >= 2 * (rank -1) + tile_height, "h too small for rank and tile_height. Must be at least 2*(rank-1) + tile_height.");
+  @comptime_assert(w_compute_region > 0, "w - 2*(rank-1) must be positive. Original width too small for rank.");
+  @comptime_assert(h_compute_region > 0, "h - 2*(rank-1) must be positive. Original height too small for rank.");
+  @comptime_assert(w_compute_region % tile_width == 0, "w - 2*(rank-1) must be a multiple of tile_width");
+  @comptime_assert(h_compute_region % tile_height == 0, "h - 2*(rank-1) must be a multiple of tile_height");
   @comptime_assert(rank <= tile_width, "rank must be smaller or equal to tile_width");
   @comptime_assert(rank <= tile_height, "rank must be smaller or equal to tile_height");
 }
