@@ -43,7 +43,7 @@ const four: f32 = 4.4;
 const five: f32 = 5.5;
 
 // DSDs for accessing weights and matrix
-// const weights_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{rank+1} -> weights[i] });
+// const weights_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{radius+1} -> weights[i] });
 // const matrix_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{1} -> matrix[0] });
 // const send_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_col, .extent = 1, .output_queue = send_color_oq });
 

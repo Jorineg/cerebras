@@ -77,7 +77,7 @@ const intermediate_sum_2_dsr_src1 = @get_dsr(dsr_src1, 5);
 // function that initializes weights
 // divide weights to not have to divide in the loop
 // first weight is for center element, others are for neighbors
-// so that sum of w[0] + 4*w[1] + 4*w[2] + ... + 4*w[rank] = 1
+// so that sum of w[0] + 4*w[1] + 4*w[2] + ... + 4*w[radius] = 1
 fn init_weights() void {
   var sum: f32 = weight_zero + 4.0 * weight_one;
   weight_zero /= sum;

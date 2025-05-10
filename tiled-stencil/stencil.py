@@ -6,8 +6,7 @@ def star_stencil(matrix, weights, iterations):
     Applies a star-shaped stencil for weighted averaging on a matrix.
     """
     matrix = np.array(matrix, dtype=float)
-    rank = len(weights)
-    border = rank - 1
+    radius = len(weights) - 1
     rows, cols = matrix.shape
 
     for iter in range(iterations):
@@ -20,7 +19,7 @@ def star_stencil(matrix, weights, iterations):
                 total_weight = weights[0]
 
                 # Apply stencil for each distance level
-                for r in range(1, rank):
+                for r in range(1, radius + 1):
                     # Up, Down, Left, Right
                     neighbors = [
                         matrix[i - r, j],  # Up

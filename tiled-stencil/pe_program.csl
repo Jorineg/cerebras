@@ -17,7 +17,7 @@ param row: i16;
 param col: i16;
 param pe_width: i16;
 param pe_height: i16;
-param rank: i16;
+param radius: i16;
 param tile_width: i16;
 param tile_height: i16;
 
@@ -38,57 +38,58 @@ const recv_color_iq_s = @get_input_queue(5);
 const is_corner = (col == 0 or col == width-1) and (row == 0 or row == height-1);
 const exit_task_id: local_task_id = @get_local_task_id(9);
 
-var weights: [rank+1]f32;
+var weights: [radius+1]f32;
 var own_values: [tile_height, tile_width]f32;
-var buffer: [tile_height + 2*rank, tile_width + 2*rank]f32;
+var buffer: [tile_height + 2*radius, tile_width + 2*radius]f32;
 
 // pointers
 var weights_ptr = &weights;
 var own_values_ptr = &own_values;
+var buffer_ptr = &buffer;
 
 // mem DSDs
-const all_buffer_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height + 2*rank, tile_width + 2*rank} -> buffer[i, j] });
-const buffer_center_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + i, rank + j] });
+const all_buffer_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height + 2*radius, tile_width + 2*radius} -> buffer[i, j] });
+const buffer_center_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[radius + i, radius + j] });
 const own_values_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> own_values[i, j] });
 
-const own_values_send_north_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{rank, tile_width} -> own_values[i, j] });
-const own_values_send_south_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{rank, tile_width} -> own_values[tile_height - rank + i, j] });
-const own_values_send_west_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, rank} -> own_values[i, j] });
-const own_values_send_east_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, rank} -> own_values[i, tile_width - rank + j] });
+const own_values_send_north_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> own_values[i, j] });
+const own_values_send_south_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> own_values[tile_height - radius + i, j] });
+const own_values_send_west_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> own_values[i, j] });
+const own_values_send_east_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> own_values[i, tile_width - radius + j] });
 
-const buffer_recv_north_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{rank, tile_width} -> buffer[i, rank + j] });
-const buffer_recv_south_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{rank, tile_width} -> buffer[tile_height + rank + i, rank + j] });
-const buffer_recv_west_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, rank} -> buffer[rank + i, j] });
-const buffer_recv_east_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, rank} -> buffer[rank + i, tile_width + rank + j] });
+const buffer_recv_north_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> buffer[i, radius + j] });
+const buffer_recv_south_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> buffer[tile_height + radius + i, radius + j] });
+const buffer_recv_west_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> buffer[radius + i, j] });
+const buffer_recv_east_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> buffer[radius + i, tile_width + radius + j] });
 
-// var buffer_shift_up_center_dsd_array: [rank]mem4d_dsd;
-// var buffer_shift_down_center_dsd_array: [rank]mem4d_dsd;
-// var buffer_shift_left_center_dsd_array: [rank]mem4d_dsd;
-// var buffer_shift_right_center_dsd_array: [rank]mem4d_dsd;
+// var buffer_shift_up_center_dsd_array: [radius]mem4d_dsd;
+// var buffer_shift_down_center_dsd_array: [radius]mem4d_dsd;
+// var buffer_shift_left_center_dsd_array: [radius]mem4d_dsd;
+// var buffer_shift_right_center_dsd_array: [radius]mem4d_dsd;
 
-const buffer_shift_center_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + i, rank + j] });
+const buffer_shift_center_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[radius + i, radius + j] });
 
 
 // communication DSDs
-const send_north_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_n_col, .extent = tile_width*rank, .output_queue = send_color_oq_n });
-const send_south_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_s_col, .extent = tile_width*rank, .output_queue = send_color_oq_s });
-const send_west_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_w_col, .extent = tile_height*rank, .output_queue = send_color_oq_w });
-const send_east_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_e_col, .extent = tile_height*rank, .output_queue = send_color_oq_e });
+const send_north_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_n_col, .extent = tile_width*radius, .output_queue = send_color_oq_n });
+const send_south_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_s_col, .extent = tile_width*radius, .output_queue = send_color_oq_s });
+const send_west_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_w_col, .extent = tile_height*radius, .output_queue = send_color_oq_w });
+const send_east_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_e_col, .extent = tile_height*radius, .output_queue = send_color_oq_e });
 
-const recv_north_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_n_col, .extent = tile_width*rank, .input_queue = recv_color_iq_n });
-const recv_south_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_s_col, .extent = tile_width*rank, .input_queue = recv_color_iq_s });
-const recv_west_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_w_col, .extent = tile_height*rank, .input_queue = recv_color_iq_w });
-const recv_east_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_e_col, .extent = tile_height*rank, .input_queue = recv_color_iq_e });
+const recv_north_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_n_col, .extent = tile_width*radius, .input_queue = recv_color_iq_n });
+const recv_south_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_s_col, .extent = tile_width*radius, .input_queue = recv_color_iq_s });
+const recv_west_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_w_col, .extent = tile_height*radius, .input_queue = recv_color_iq_w });
+const recv_east_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_e_col, .extent = tile_height*radius, .input_queue = recv_color_iq_e });
 
 
 
 // fn init_buffer_shift_dsd_arrays() void {
-//   for (@range(i16, rank)) |k| {
+//   for (@range(i16, radius)) |k| {
 //     var shift = k+1;
-//     buffer_shift_up_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank - shift + i, rank + j] });
-//     buffer_shift_down_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + shift + i, rank + j] });
-//     buffer_shift_left_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + i, rank - shift + j] });
-//     buffer_shift_right_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[rank + i, rank + shift + j] });
+//     buffer_shift_up_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[radius - shift + i, radius + j] });
+//     buffer_shift_down_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[radius + shift + i, radius + j] });
+//     buffer_shift_left_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[radius + i, radius - shift + j] });
+//     buffer_shift_right_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[radius + i, radius + shift + j] });
 //   }
 // }
 
@@ -97,13 +98,13 @@ const recv_east_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_e_col, .extent
 // function that initializes weights
 // divide weights to not have to divide in the loop
 // first weight is for center element, others are for neighbors
-// so that sum of w[0] + 4*w[1] + 4*w[2] + ... + 4*w[rank] = 1
+// so that sum of w[0] + 4*w[1] + 4*w[2] + ... + 4*w[radius] = 1
 fn init_weights() void {
   var sum: f32 = 0.0;
-  for (@range(i16, rank+1)) |i| {
+  for (@range(i16, radius+1)) |i| {
     sum += if (i == 0) weights[i] else 4.0*weights[i];
   }
-  for (@range(i16, rank+1)) |i| {
+  for (@range(i16, radius+1)) |i| {
     weights[i] /= sum;
   }
 }
@@ -127,15 +128,15 @@ fn loop() void {
   // multiply own_values with weights[0]
   @fmuls(own_values_dsd, own_values_dsd, weights[0]);
 
-  for (@range(i16, 1, rank, 1)) |i| {
+  for (@range(i16, 1, radius, 1)) |i| {
     const weight: f32 = if (i == 1) weights[i] else weights[i]/weights[i-1];
     
     // multiply buffer with weight
     @fmuls(all_buffer_dsd, all_buffer_dsd, weight);
 
     // create shifted dsds
-    var up_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, i*(tile_width+2*rank), f32);
-    var down_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, -i*(tile_width+2*rank), f32);
+    var up_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, i*(tile_width+2*radius), f32);
+    var down_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, -i*(tile_width+2*radius), f32);
     var left_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, -i, f32);
     var right_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, i, f32);
     
@@ -228,5 +229,5 @@ comptime {
   @export_symbol(own_values_ptr, "values");
   @export_symbol(weights_ptr, "weights");
   @export_symbol(compute);
-  
+  @export_symbol(buffer_ptr, "buffer");
 }

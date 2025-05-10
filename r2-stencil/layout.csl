@@ -3,7 +3,7 @@ param w: i16;
 param h: i16;
 param steps: i16;
 
-const rank: i16 = 1;
+const radius: i16 = 1;
 
 const memcpy = @import_module("<memcpy/get_params>", .{
   .width = w,
@@ -30,7 +30,7 @@ layout {
   for (@range(i16, w)) |col| {
     for (@range(i16, h)) |row| {
 
-      const is_static_region: bool = col<rank or row<rank or col>=w-rank or row>=h-rank;
+      const is_static_region: bool = col<radius or row<radius or col>=w-radius or row>=h-radius;
 
       const send_col = cols[get_color(col, row)];
       const recv_e_col_1 = cols[get_color(col+1, row)];
