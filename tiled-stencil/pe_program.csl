@@ -1,3 +1,5 @@
+const simprint = @import_module("<simprint>");
+
 // params
 param memcpy_params: comptime_struct;
 param is_border: bool;
@@ -128,7 +130,7 @@ fn loop() void {
   // multiply own_values with weights[0]
   @fmuls(own_values_dsd, own_values_dsd, weights[0]);
 
-  for (@range(i16, 1, radius, 1)) |i| {
+  for (@range(i16, 1, radius + 1, 1)) |i| {
     const weight: f32 = if (i == 1) weights[i] else weights[i]/weights[i-1];
     
     // multiply buffer with weight

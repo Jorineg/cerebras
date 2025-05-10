@@ -1,6 +1,6 @@
 #!/usr/bin/env cs_python
 
-WEIGHTS = [1.0, 0.5]
+WEIGHTS = [1.0, 0.5, 0.25]
 
 import argparse
 import json
@@ -31,6 +31,8 @@ tile_width = int(compile_data["params"]["tile_width"])
 tile_height = int(compile_data["params"]["tile_height"])
 radius = int(compile_data["params"]["radius"])
 num_iterations = int(compile_data["params"]["num_iterations"])
+
+assert radius == len(WEIGHTS) - 1, "radius must be equal to the number of weights - 1"
 
 w_compute_region_py = width - 2 * radius
 h_compute_region_py = height - 2 * radius
@@ -71,7 +73,7 @@ runner.load()
 runner.run()
 
 # repeat weights for each PE
-pe_weights = np.repeat(WEIGHTS, num_pe_x * num_pe_y).astype(np.float32)
+pe_weights = np.tile(WEIGHTS, num_pe_x * num_pe_y).astype(np.float32)
 
 # copy weights to device
 runner.memcpy_h2d(
@@ -108,7 +110,7 @@ def tile_matrix(m_orig, current_radius, current_tile_width, current_tile_height,
     swapped = reshaped.swapaxes(1, 2) # num_pe_y, num_pe_x, tile_height, tile_width
     return swapped.flatten()
 
-def untile_matrix(m_flat, current_radius, current_tile_width, current_tile_height, current_num_pe_y, current_num_pe_x):
+def untile_matrix(m_flat, current_radius, current_tile_width, current_tile_height, current_num_pe_y, current_num_pe_x):    
     h_device_grid = current_num_pe_y * current_tile_height
     w_device_grid = current_num_pe_x * current_tile_width
     
@@ -120,7 +122,7 @@ def untile_matrix(m_flat, current_radius, current_tile_width, current_tile_heigh
     slice_y = current_tile_height - current_radius
     slice_x = current_tile_width - current_radius
     
-    m_original = canvas_reconstructed[slice_y : -slice_y, slice_x : -slice_x]
+    m_original = canvas_reconstructed[slice_y : len(canvas_reconstructed) - slice_y, slice_x : len(canvas_reconstructed[0]) - slice_x]
     return m_original
 
 # data must be one-dimensional so flatten the matrix
@@ -186,7 +188,7 @@ runner.memcpy_d2h(
 
 print("copied buffer from device to host")
 buffer = buffer_device_flat.reshape(tile_height + 2 * radius, tile_width + 2 * radius)
-print_matrix(buffer, "Buffer from device")
+# print_matrix(buffer, "Buffer from device")
 
 
 # Untile the result, passing original dimensions height, width

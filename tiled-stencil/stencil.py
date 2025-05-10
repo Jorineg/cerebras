@@ -13,8 +13,8 @@ def star_stencil(matrix, weights, iterations):
         new_matrix = matrix.copy()
 
         # Only update non-border elements
-        for i in range(border, rows - border):
-            for j in range(border, cols - border):
+        for i in range(radius, rows - radius):
+            for j in range(radius, cols - radius):
                 weighted_sum = matrix[i, j] * weights[0]  # Center point
                 total_weight = weights[0]
 
