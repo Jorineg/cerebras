@@ -1,3 +1,11 @@
+// cycle count evaluation
+// 1.  3642->4133 = 
+// 2.  4133->4624 = 491
+// 3.  4624->5115 = 491
+// 4.  5115->5606 = 491
+// 5.  5606->6097 = 491
+
+
 const simprint = @import_module("<simprint>");
 
 // params
@@ -27,19 +35,33 @@ param tile_height: i16;
 const sys_mod = @import_module("<memcpy/memcpy>", memcpy_params);
 
 // Queue IDs
-const send_color_oq_e = @get_output_queue(1);  // 0 is reserved
-const send_color_oq_w = @get_output_queue(2);
-const send_color_oq_n = @get_output_queue(3);
-const send_color_oq_s = @get_output_queue(4);
+const send_color_oq_e = @get_output_queue(0);  // 0 is reserved
+const send_color_oq_w = @get_output_queue(1);
+const send_color_oq_n = @get_output_queue(2);
+const send_color_oq_s = @get_output_queue(3);
 
-const recv_color_iq_e = @get_input_queue(2);  // 0 and 1 are reserved
-const recv_color_iq_w = @get_input_queue(3);
-const recv_color_iq_n = @get_input_queue(4);
-const recv_color_iq_s = @get_input_queue(5);
+const recv_color_iq_e = @get_input_queue(4);  // 0 and 1 are reserved
+const recv_color_iq_w = @get_input_queue(5);
+const recv_color_iq_n = @get_input_queue(6);
+const recv_color_iq_s = @get_input_queue(7);
 
-const is_corner = (col == 0 or col == width-1) and (row == 0 or row == height-1);
+const is_corner = (col == 0 or col == pe_width-1) and (row == 0 or row == pe_height-1);
 const exit_task_id: local_task_id = @get_local_task_id(9);
+const receive_east_task_id: local_task_id = @get_local_task_id(10);
+const receive_west_task_id: local_task_id = @get_local_task_id(11);
+const receive_north_task_id: local_task_id = @get_local_task_id(12);
+const receive_south_task_id: local_task_id = @get_local_task_id(13);
+const send_west_task_id: local_task_id = @get_local_task_id(14);
+const send_east_task_id: local_task_id = @get_local_task_id(15);
+const send_north_task_id: local_task_id = @get_local_task_id(16);
+const send_south_task_id: local_task_id = @get_local_task_id(17);
 
+const loop_task_id: local_task_id = @get_local_task_id(18);
+
+
+var receive_count: i16 = 0;
+var send_count: i16 = 0;
+var iteration_count: i16 = 0;
 var weights: [radius+1]f32;
 var own_values: [tile_height, tile_width]f32;
 var buffer: [tile_height + 2*radius, tile_width + 2*radius]f32;
@@ -112,7 +134,12 @@ fn init_weights() void {
 }
 
 
-fn loop() void {
+task loop_task() void {
+
+  simprint.fmt_with_coords("loop task begin", .{});
+
+  @block(loop_task_id);
+
   // copy own_values to buffer
   @fmovs(buffer_center_dsd, own_values_dsd);
 
@@ -121,32 +148,103 @@ fn loop() void {
 
   //receive data from all directions and store in buffer
   receive_from_neighbors();
+}
 
-  // if is_border is true: return
-  if (is_border) {
+fn send_task() void {
+  send_count += 1;
+
+  var max_send: i16 = 4;
+  if (is_corner) {
+    max_send = 2;
+  } else if (is_border) {
+    max_send = 3;
+  }
+  
+  if (send_count < max_send) {
     return;
   }
+  send_count = 0;
+  @unblock(loop_task_id);
+}
 
-  // multiply own_values with weights[0]
-  @fmuls(own_values_dsd, own_values_dsd, weights[0]);
+task send_west_task() void {
+  send_task();
+}
 
-  for (@range(i16, 1, radius + 1, 1)) |i| {
-    const weight: f32 = if (i == 1) weights[i] else weights[i]/weights[i-1];
-    
-    // multiply buffer with weight
-    @fmuls(all_buffer_dsd, all_buffer_dsd, weight);
+task send_east_task() void {
+  send_task();
+}
 
-    // create shifted dsds
-    var up_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, i*(tile_width+2*radius), f32);
-    var down_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, -i*(tile_width+2*radius), f32);
-    var left_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, -i, f32);
-    var right_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, i, f32);
-    
-    // add shifted dsds to own_values
-    @fadds(own_values_dsd, own_values_dsd, up_shift_dsd);
-    @fadds(own_values_dsd, own_values_dsd, down_shift_dsd);
-    @fadds(own_values_dsd, own_values_dsd, left_shift_dsd);
-    @fadds(own_values_dsd, own_values_dsd, right_shift_dsd);
+task send_north_task() void {
+  send_task();
+}
+
+task send_south_task() void {
+  send_task();
+}
+
+task receive_east_task() void {
+  receive_task();
+}
+
+task receive_west_task() void {
+  receive_task();
+}
+
+task receive_north_task() void {
+  receive_task();
+}
+
+task receive_south_task() void {
+  receive_task();
+}
+
+fn receive_task() void {
+  receive_count += 1;
+  var max_receive: i16 = 4;
+  
+  if (is_corner) {
+    max_receive = 2;
+  } else if (is_border) {
+    max_receive = 3;
+  }
+
+  if (receive_count < max_receive) {
+    return;
+  }
+  receive_count = 0;
+
+  // if is_border is true: return
+  if (!is_border) {
+
+    // multiply own_values with weights[0]
+    @fmuls(own_values_dsd, own_values_dsd, weights[0]);
+
+    for (@range(i16, 1, radius + 1, 1)) |i| {
+      const weight: f32 = if (i == 1) weights[i] else weights[i]/weights[i-1];
+      
+      // multiply buffer with weight
+      @fmuls(all_buffer_dsd, all_buffer_dsd, weight);
+
+      // create shifted dsds
+      var up_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, i*(tile_width+2*radius), f32);
+      var down_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, -i*(tile_width+2*radius), f32);
+      var left_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, -i, f32);
+      var right_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, i, f32);
+      
+      // add shifted dsds to own_values
+      @fadds(own_values_dsd, own_values_dsd, up_shift_dsd);
+      @fadds(own_values_dsd, own_values_dsd, down_shift_dsd);
+      @fadds(own_values_dsd, own_values_dsd, left_shift_dsd);
+      @fadds(own_values_dsd, own_values_dsd, right_shift_dsd);
+    }
+  }
+
+  iteration_count += 1;
+  if (iteration_count < num_iterations) {
+    @activate(loop_task_id);
+  }else{
+    @activate(exit_task_id);
   }
 }
 
@@ -154,58 +252,70 @@ fn loop() void {
 fn send_to_neighbors() void {
   // send west
   if(col != 0){
-    @fmovs(send_west_dsd, own_values_send_west_dsd);
+    @fmovs(send_west_dsd, own_values_send_west_dsd, .{.async=true, .activate=send_west_task});
   }
   //send east
   if(col != pe_width-1){
-    @fmovs(send_east_dsd, own_values_send_east_dsd);
+    @fmovs(send_east_dsd, own_values_send_east_dsd, .{.async= true, .activate=send_east_task});
   }
   // send north
   if(row != 0){
-    @fmovs(send_north_dsd, own_values_send_north_dsd);
+    @fmovs(send_north_dsd, own_values_send_north_dsd, .{.async= true, .activate=send_north_task});
   }
   // send south
   if(row != pe_height-1){
-    @fmovs(send_south_dsd, own_values_send_south_dsd);
+    @fmovs(send_south_dsd, own_values_send_south_dsd, .{.async= true, .activate=send_south_task});
   }
 }
 
 fn receive_from_neighbors() void {
   // receive west
   if(col != 0){
-    @fmovs(buffer_recv_west_dsd, recv_west_dsd);
+    @fmovs(buffer_recv_west_dsd, recv_west_dsd, .{.async=true, .activate=receive_west_task});
   }
   //receive east
   if(col != pe_width-1){
-    @fmovs(buffer_recv_east_dsd, recv_east_dsd);
+    @fmovs(buffer_recv_east_dsd, recv_east_dsd, .{.async=true, .activate=receive_east_task});
   }
   // receive north
   if(row != 0){
-    @fmovs(buffer_recv_north_dsd, recv_north_dsd);
+    @fmovs(buffer_recv_north_dsd, recv_north_dsd, .{.async=true, .activate=receive_north_task});
   }
   // receive south
   if(row != pe_height-1){
-    @fmovs(buffer_recv_south_dsd, recv_south_dsd);
+    @fmovs(buffer_recv_south_dsd, recv_south_dsd, .{.async=true, .activate=receive_south_task});
   }
 }
 
 
 fn compute() void {
   init_weights();
-  for (@range(i16, num_iterations)) |i| {
-    loop();
-  }
-  @activate(exit_task_id);
+  // for (@range(i16, num_iterations)) |i| {
+  @activate(loop_task_id);
+  // }
+  // @activate(exit_task_id);
 }
 
 
 task exit_task() void {
+  simprint.fmt_with_coords("exit task begin", .{});
   sys_mod.unblock_cmd_stream();
 }
 
 comptime {
   // When exit_task_id is activated, exit_task will execute
   @bind_local_task(exit_task, exit_task_id);
+  @bind_local_task(receive_east_task, receive_east_task_id);
+  @bind_local_task(receive_west_task, receive_west_task_id);
+  @bind_local_task(receive_north_task, receive_north_task_id);
+  @bind_local_task(receive_south_task, receive_south_task_id);
+
+  @bind_local_task(send_west_task, send_west_task_id);
+  @bind_local_task(send_east_task, send_east_task_id);
+  @bind_local_task(send_north_task, send_north_task_id);
+  @bind_local_task(send_south_task, send_south_task_id);
+
+  @bind_local_task(loop_task, loop_task_id);
 
   // On WSE-3, we must explicitly initialize input and output queues
   if (@is_arch("wse3")) {

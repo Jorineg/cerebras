@@ -28,7 +28,7 @@ var y: [M]f16;
 var receive_buffer: [M]f16;
 var result: [M]f16;
 
-const x_src1_dsr = @get_dsr(dsr_src1, 5);
+// const x_src1_dsr = @get_dsr(dsr_src1, 5);
 
 // DSDs for accessing y, receive_buffer
 const x_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{M} -> x[i] });
@@ -43,7 +43,10 @@ var result_ptr: [*]f16 = &result;
 
 
 fn elem_prod() void {
-  @fmulh(result_dsd, y_dsd, x_src1_dsr, .{ .async = true, .activate = exit_task_id });
+  for (@range(i16, 100)) |i| {
+    @fmulh(result_dsd, x_dsd, y_dsd);
+  }
+  // @activate(exit_task_id);
 }
 
 fn send_right() void {
@@ -61,16 +64,17 @@ fn recv_left() void {
                    .input_queue = send_color_iq
                  });
   // After fadds is done, activate exit_task to unblock cmd stream
-  @fmovh(receive_buffer_dsd, in_dsd, .{ .async = true});
+  @fmovh(receive_buffer_dsd, in_dsd);
 }
 
 // Call gemv function and send/ receive partial result y
 fn compute() void {
   if (pe_id == 0) {
+    elem_prod();
     send_right();
   } else {
-    elem_prod();
-    recv_left();
+    // recv_left();
+    @activate(exit_task_id);
   }
 }
 
@@ -80,7 +84,7 @@ task exit_task() void {
 
 comptime {
 
-  @load_to_dsr(x_src1_dsr, x_dsd);
+  // @load_to_dsr(x_src1_dsr, x_dsd);
 
   // When exit_task_id is activated, exit_task will execute
   @bind_local_task(exit_task, exit_task_id);
