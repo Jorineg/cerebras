@@ -105,6 +105,7 @@ const recv_south_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_s_col, .exten
 const recv_west_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_w_col, .extent = tile_height*radius, .input_queue = recv_color_iq_w });
 const recv_east_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_e_col, .extent = tile_height*radius, .input_queue = recv_color_iq_e });
 
+var _wait_var: i16 = 0;
 
 
 // fn init_buffer_shift_dsd_arrays() void {
@@ -130,6 +131,13 @@ fn init_weights() void {
   }
   for (@range(i16, radius+1)) |i| {
     weights[i] /= sum;
+  }
+}
+
+
+fn wait_cycles(cycles: i16) void {
+  for (@range(i16, cycles)) |i| {
+    _wait_var += 1;
   }
 }
 
@@ -241,9 +249,13 @@ fn receive_task() void {
 
       // add multiple of dsd to own_values with fused multiply add
       @fmacs(own_values_dsd, own_values_dsd, up_shift_dsd, weight);
+      wait_cycles(1);
       @fmacs(own_values_dsd, own_values_dsd, down_shift_dsd, weight);
+      wait_cycles(1);
       @fmacs(own_values_dsd, own_values_dsd, left_shift_dsd, weight);
+      wait_cycles(1);
       @fmacs(own_values_dsd, own_values_dsd, right_shift_dsd, weight);
+      wait_cycles(1);
     }
   }
 
