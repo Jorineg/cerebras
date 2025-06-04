@@ -221,22 +221,29 @@ fn receive_task() void {
     @fmuls(own_values_dsd, own_values_dsd, weights[0]);
 
     for (@range(i16, 1, radius + 1, 1)) |i| {
-      const weight: f32 = if (i == 1) weights[i] else weights[i]/weights[i-1];
+      // const weight: f32 = if (i == 1) weights[i] else weights[i]/weights[i-1];
+      const weight: f32 = weights[i];
       
       // multiply buffer with weight
-      @fmuls(all_buffer_dsd, all_buffer_dsd, weight);
+      // @fmuls(all_buffer_dsd, all_buffer_dsd, weight);
 
       // create shifted dsds
-      var up_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, i*(tile_width+2*radius), f32);
-      var down_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, -i*(tile_width+2*radius), f32);
+      var up_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, -i*(tile_width+2*radius), f32);
+      var down_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, i*(tile_width+2*radius), f32);
       var left_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, -i, f32);
       var right_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, i, f32);
       
       // add shifted dsds to own_values
-      @fadds(own_values_dsd, own_values_dsd, up_shift_dsd);
-      @fadds(own_values_dsd, own_values_dsd, down_shift_dsd);
-      @fadds(own_values_dsd, own_values_dsd, left_shift_dsd);
-      @fadds(own_values_dsd, own_values_dsd, right_shift_dsd);
+      // @fadds(own_values_dsd, own_values_dsd, up_shift_dsd);
+      // @fadds(own_values_dsd, own_values_dsd, down_shift_dsd);
+      // @fadds(own_values_dsd, own_values_dsd, left_shift_dsd);
+      // @fadds(own_values_dsd, own_values_dsd, right_shift_dsd);
+
+      // add multiple of dsd to own_values with fused multiply add
+      @fmacs(own_values_dsd, own_values_dsd, up_shift_dsd, weight);
+      @fmacs(own_values_dsd, own_values_dsd, down_shift_dsd, weight);
+      @fmacs(own_values_dsd, own_values_dsd, left_shift_dsd, weight);
+      @fmacs(own_values_dsd, own_values_dsd, right_shift_dsd, weight);
     }
   }
 
