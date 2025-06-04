@@ -1,12 +1,31 @@
-// cycle count evaluation
-// 1.  3642->4133 = 
-// 2.  4133->4624 = 491
-// 3.  4624->5115 = 491
-// 4.  5115->5606 = 491
-// 5.  5606->6097 = 491
+// cycle count evaluation (6x6 tile, radius=1 -> 4*36 fmacs + 36 fmuls)
+// 1.  3391->3874 = 483
+// 2.  3874->4357 = 483
+// 3.  4357->4839 = 482
+// 4.  4839->5321 = 482
+
+// 1.5 cycles per fmacs for up down shifted
+// 1 cycle per fmacs for left right shifted
+// 10 cycles for starting fmacs (probaply moving dsd to dsr) -> 50 cycles per iteration. Can be saved by using dsrs from the start.
+// 1 cycle for fmuls
 
 
-const simprint = @import_module("<simprint>");
+// communication
+// 6040 -> 6184 = 144 cycles
+// Theoretical:
+// send and receive values: 6*4*2=48 values and 48 cycles
+
+// fuls: 36
+// fmacs: 2*36*1.5 = 108
+// fmacs: 2*36*1 = 72
+// communication: 144
+// other??: 50
+// total: 36+108+72+144+50 = 410
+
+// lower bound calculation: 36*5/s = 180/s
+
+
+// const simprint = @import_module("<simprint>");
 
 // params
 param memcpy_params: comptime_struct;
@@ -134,17 +153,9 @@ fn init_weights() void {
   }
 }
 
-
-fn wait_cycles(cycles: i16) void {
-  for (@range(i16, cycles)) |i| {
-    _wait_var += 1;
-  }
-}
-
-
 task loop_task() void {
 
-  simprint.fmt_with_coords("loop task begin", .{});
+  // simprint.fmt_with_coords("loop task begin", .{});
 
   @block(loop_task_id);
 
@@ -249,13 +260,13 @@ fn receive_task() void {
 
       // add multiple of dsd to own_values with fused multiply add
       @fmacs(own_values_dsd, own_values_dsd, up_shift_dsd, weight);
-      wait_cycles(1);
+      _wait_var += 1;  // wait for 1 cycle
       @fmacs(own_values_dsd, own_values_dsd, down_shift_dsd, weight);
-      wait_cycles(1);
+      _wait_var += 1;
       @fmacs(own_values_dsd, own_values_dsd, left_shift_dsd, weight);
-      wait_cycles(1);
+      _wait_var += 1;
       @fmacs(own_values_dsd, own_values_dsd, right_shift_dsd, weight);
-      wait_cycles(1);
+      _wait_var += 1;
     }
   }
 
@@ -317,7 +328,7 @@ fn compute() void {
 
 
 task exit_task() void {
-  simprint.fmt_with_coords("exit task begin", .{});
+  // simprint.fmt_with_coords("exit task begin", .{});
   sys_mod.unblock_cmd_stream();
 }
 
