@@ -91,43 +91,63 @@ runner.memcpy_h2d(
 )
 print("copied weights to device")
 
-def tile_matrix(m_orig, current_radius, current_tile_width, current_tile_height, current_num_pe_y, current_num_pe_x):
-    # Symmetric padding amounts to correctly position m_orig within the PE grid canvas.
-    # tile_dim - radius ensures m_orig[radius,radius] maps to the start of PE(1,1)'s tile data.
-    # Assertions: radius >= 1 and tile_dim >= radius (from CSL) ensure pad_y/pad_x >= 0.
-    pad_y = current_tile_height - current_radius
-    pad_x = current_tile_width - current_radius
+def create_padded_device_matrix(m_orig, current_radius, current_tile_width, current_tile_height, current_num_pe_y, current_num_pe_x):
+    """
+    Tiles the original matrix and adds padding to each tile to match the device memory layout.
+    """
+    pad_y_canvas = current_tile_height - current_radius
+    pad_x_canvas = current_tile_width - current_radius
+    canvas = np.pad(m_orig, ((pad_y_canvas, pad_y_canvas), (pad_x_canvas, pad_x_canvas)), mode='constant')
+    
+    # split into tiles -> (num_pe_y, tile_height, num_pe_x, tile_width)
+    unpadded_tiles = canvas.reshape(current_num_pe_y, current_tile_height, current_num_pe_x, current_tile_width).swapaxes(1, 2)
+    
+    # add padding to each tile -> (num_pe_y, tile_height, num_pe_x, tile_width)
+    padded_tiles = np.pad(
+        unpadded_tiles, 
+        (
+            (0, 0), # no padding for the PE-Grid-Dimension y
+            (0, 0), # no padding for the PE-Grid-Dimension x
+            (current_radius, current_radius), # padding for tile_height
+            (current_radius, current_radius+1)  # padding for tile_width
+        ),
+        mode='constant'
+    )
+    
+    # flatten the matrix to be able to memcpy it to the device
+    return padded_tiles.flatten()
 
-    canvas = np.pad(m_orig,
-                      ((pad_y, pad_y), (pad_x, pad_x)), # Apply symmetric padding
-                      mode='constant',
-                      constant_values=0)
 
-    # The dimensions of 'canvas' will be (current_num_pe_y * current_tile_height, current_num_pe_x * current_tile_width)
-    # due to the relationship between num_pe_dims, orig matrix dims, radius, and tile_dims established in layout.csl.
+def untile_padded_matrix(m_flat_padded, current_radius, current_tile_width, current_tile_height, current_num_pe_y, current_num_pe_x):
+    """
+    Takes the flattened, padded data from the device, removes padding from each tile,
+    and reconstructs the original matrix.
+    """
+    # reshape the padded matrix to 4D
+    padded_tile_h = current_tile_height + 2 * current_radius
+    padded_tile_w = current_tile_width + 2 * current_radius + 1
+    padded_4d = m_flat_padded.reshape(current_num_pe_y, current_num_pe_x, padded_tile_h, padded_tile_w)
 
-    reshaped = canvas.reshape(current_num_pe_y, current_tile_height, current_num_pe_x, current_tile_width)
-    swapped = reshaped.swapaxes(1, 2) # num_pe_y, num_pe_x, tile_height, tile_width
-    return swapped.flatten()
+    # remove the padding from each tile by slicing
+    unpadded_4d = padded_4d[:, :, current_radius:padded_tile_h-current_radius, current_radius:padded_tile_w-current_radius-1]
 
-def untile_matrix(m_flat, current_radius, current_tile_width, current_tile_height, current_num_pe_y, current_num_pe_x):    
+    # swap the axes to get the tiles back in the correct order
+    swapped_back = unpadded_4d.swapaxes(1, 2)
     h_device_grid = current_num_pe_y * current_tile_height
     w_device_grid = current_num_pe_x * current_tile_width
-    
-    reshaped_from_flat = m_flat.reshape(current_num_pe_y, current_num_pe_x, current_tile_height, current_tile_width)
-    swapped_back = reshaped_from_flat.swapaxes(1, 2) 
     canvas_reconstructed = swapped_back.reshape(h_device_grid, w_device_grid)
 
-    # Slice out the original matrix using the same symmetric padding values.
     slice_y = current_tile_height - current_radius
     slice_x = current_tile_width - current_radius
     
+    # slice out the original matrix from the canvas
     m_original = canvas_reconstructed[slice_y : len(canvas_reconstructed) - slice_y, slice_x : len(canvas_reconstructed[0]) - slice_x]
     return m_original
 
+
 # data must be one-dimensional so flatten the matrix
 # Pass all necessary current values to tile_matrix
-device_matrix = tile_matrix(matrix, radius, tile_width, tile_height, num_pe_y, num_pe_x)
+device_matrix = create_padded_device_matrix(matrix, radius, tile_width, tile_height, num_pe_y, num_pe_x)
 
 
 # Copy matrix into matrix of PEs
@@ -138,7 +158,7 @@ runner.memcpy_h2d(
     0, # dest_y
     num_pe_x, # width_in_pes
     num_pe_y, # height_in_pes
-    tile_width * tile_height, # num_elements_per_pe
+    (tile_width + 2*radius+1) * (tile_height + 2*radius), # num_elements_per_pe
     streaming=False,
     order=MemcpyOrder.ROW_MAJOR,
     data_type=MemcpyDataType.MEMCPY_32BIT,
@@ -153,7 +173,7 @@ runner.launch("compute", nonblock=False)
 print("launched compute on device")
 
 # Allocate space for result from device (entire PE grid's data)
-result_device_flat = np.zeros(num_pe_y * num_pe_x * tile_height * tile_width, dtype=np.float32)
+result_device_flat = np.zeros(num_pe_y * num_pe_x * (tile_height + 2*radius) * (tile_width + 2*radius+1), dtype=np.float32)
 
 runner.memcpy_d2h(
     result_device_flat,
@@ -162,7 +182,7 @@ runner.memcpy_d2h(
     0, # src_y
     num_pe_x, # width_in_pes
     num_pe_y, # height_in_pes
-    tile_width * tile_height, # num_elements_per_pe
+    (tile_width + 2*radius+1) * (tile_height + 2*radius), # num_elements_per_pe
     streaming=False,
     order=MemcpyOrder.ROW_MAJOR,
     data_type=MemcpyDataType.MEMCPY_32BIT,
@@ -171,7 +191,7 @@ runner.memcpy_d2h(
 
 # for debugging, copy buffer from 1,1 element to host
 buffer_symbol = runner.get_id("buffer")
-buffer_device_flat = np.zeros((tile_height + 2 * radius) * (tile_width + 2 * radius), dtype=np.float32)
+buffer_device_flat = np.zeros((tile_height + 2 * radius) * (tile_width + 2 * radius+1), dtype=np.float32)
 runner.memcpy_d2h(
     buffer_device_flat,
     buffer_symbol,
@@ -179,7 +199,7 @@ runner.memcpy_d2h(
     1, # src_y
     1, # width_in_pes
     1, # height_in_pes
-    (tile_height + 2 * radius) * (tile_width + 2 * radius), # num_elements_per_pe
+    (tile_height + 2 * radius) * (tile_width + 2 * radius+1), # num_elements_per_pe
     streaming=False,
     order=MemcpyOrder.ROW_MAJOR,
     data_type=MemcpyDataType.MEMCPY_32BIT,
@@ -187,12 +207,12 @@ runner.memcpy_d2h(
 )
 
 print("copied buffer from device to host")
-buffer = buffer_device_flat.reshape(tile_height + 2 * radius, tile_width + 2 * radius)
+buffer = buffer_device_flat.reshape(tile_height + 2 * radius, tile_width + 2 * radius+1)
 # print_matrix(buffer, "Buffer from device")
 
 
 # Untile the result, passing original dimensions height, width
-result = untile_matrix(result_device_flat, radius, tile_width, tile_height, num_pe_y, num_pe_x)
+result = untile_padded_matrix(result_device_flat, radius, tile_width, tile_height, num_pe_y, num_pe_x)
 
 print("copied result from device")
 

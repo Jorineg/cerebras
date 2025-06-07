@@ -126,8 +126,8 @@ layout {
   }
 
   // export symbol names
-  @export_name("values", *[tile_height, tile_width]f32, true);
+  @export_name("values", *[tile_height+2*radius, tile_width+2*radius+1]f32, true);
   @export_name("weights", *[radius+1]f32, true);
   @export_name("compute", fn()void);
-  @export_name("buffer", *[tile_height+2*radius, tile_width+2*radius]f32, true);
+  @export_name("buffer", *[tile_height+2*radius, tile_width+2*radius+1]f32, true);
 }

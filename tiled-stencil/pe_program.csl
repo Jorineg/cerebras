@@ -1,10 +1,11 @@
 // cycle count evaluation (6x6 tile, radius=1 -> 4*36 fmacs + 36 fmuls)
-// 1.  3391->3874 = 483
-// 2.  3874->4357 = 483
-// 3.  4357->4839 = 482
-// 4.  4839->5321 = 482
+// 1.  3790->4237 = 447
+// 2.  4237->4684 = 447
+// 3.  4684->5131 = 447
+// 4.  5131->5578 = 447
 
-// 1.5 cycles per fmacs for up down shifted
+
+// 1 cycles per fmacs for up down shifted
 // 1 cycle per fmacs for left right shifted
 // 10 cycles for starting fmacs (probaply moving dsd to dsr) -> 50 cycles per iteration. Can be saved by using dsrs from the start.
 // 1 cycle for fmuls
@@ -16,11 +17,10 @@
 // send and receive values: 6*4*2=48 values and 48 cycles
 
 // fuls: 36
-// fmacs: 2*36*1.5 = 108
-// fmacs: 2*36*1 = 72
+// fmacs: 4*36*1 = 144
 // communication: 144
 // other??: 50
-// total: 36+108+72+144+50 = 410
+// total: 36+144+144+50 = 374
 
 // lower bound calculation: 36*5/s = 180/s
 
@@ -82,8 +82,8 @@ var receive_count: i16 = 0;
 var send_count: i16 = 0;
 var iteration_count: i16 = 0;
 var weights: [radius+1]f32;
-var own_values: [tile_height, tile_width]f32;
-var buffer: [tile_height + 2*radius, tile_width + 2*radius]f32;
+var own_values: [tile_height + 2*radius, tile_width + 2*radius+1]f32;
+var buffer: [tile_height + 2*radius, tile_width + 2*radius+1]f32;
 
 // pointers
 var weights_ptr = &weights;
@@ -93,12 +93,12 @@ var buffer_ptr = &buffer;
 // mem DSDs
 const all_buffer_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height + 2*radius, tile_width + 2*radius} -> buffer[i, j] });
 const buffer_center_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[radius + i, radius + j] });
-const own_values_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> own_values[i, j] });
+const own_values_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> own_values[radius + i, radius + j] });
 
-const own_values_send_north_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> own_values[i, j] });
-const own_values_send_south_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> own_values[tile_height - radius + i, j] });
-const own_values_send_west_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> own_values[i, j] });
-const own_values_send_east_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> own_values[i, tile_width - radius + j] });
+const own_values_send_north_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> own_values[radius + i, radius + j] });
+const own_values_send_south_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> own_values[tile_height + i, j + radius] });
+const own_values_send_west_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> own_values[i + radius, j + radius] });
+const own_values_send_east_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> own_values[i + radius, tile_width + j] });
 
 const buffer_recv_north_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> buffer[i, radius + j] });
 const buffer_recv_south_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> buffer[tile_height + radius + i, radius + j] });
@@ -109,9 +109,6 @@ const buffer_recv_east_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile
 // var buffer_shift_down_center_dsd_array: [radius]mem4d_dsd;
 // var buffer_shift_left_center_dsd_array: [radius]mem4d_dsd;
 // var buffer_shift_right_center_dsd_array: [radius]mem4d_dsd;
-
-const buffer_shift_center_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[radius + i, radius + j] });
-
 
 // communication DSDs
 const send_north_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_n_col, .extent = tile_width*radius, .output_queue = send_color_oq_n });
@@ -247,10 +244,10 @@ fn receive_task() void {
       // @fmuls(all_buffer_dsd, all_buffer_dsd, weight);
 
       // create shifted dsds
-      var up_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, -i*(tile_width+2*radius), f32);
-      var down_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, i*(tile_width+2*radius), f32);
-      var left_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, -i, f32);
-      var right_shift_dsd = @increment_dsd_offset(buffer_shift_center_dsd, i, f32);
+      var up_shift_dsd = @increment_dsd_offset(buffer_center_dsd, -i*(tile_width+2*radius+1), f32);
+      var down_shift_dsd = @increment_dsd_offset(buffer_center_dsd, i*(tile_width+2*radius+1), f32);
+      var left_shift_dsd = @increment_dsd_offset(buffer_center_dsd, -i, f32);
+      var right_shift_dsd = @increment_dsd_offset(buffer_center_dsd, i, f32);
       
       // add shifted dsds to own_values
       // @fadds(own_values_dsd, own_values_dsd, up_shift_dsd);
