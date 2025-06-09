@@ -1,8 +1,10 @@
 // cycle count evaluation (6x6 tile, radius=1 -> 4*36 fmacs + 36 fmuls)
-// 1.  3790->4237 = 447
-// 2.  4237->4684 = 447
-// 3.  4684->5131 = 447
-// 4.  5131->5578 = 447
+// 1.  3792->4199 = 407
+// 2.  4199->4640 = 441
+// 3.  4640->5081 = 441
+// 4.  5081->5522 = 441
+
+// 505 cycles per iteration on wse3
 
 
 // 1 cycles per fmacs for up down shifted
@@ -54,15 +56,15 @@ param tile_height: i16;
 const sys_mod = @import_module("<memcpy/memcpy>", memcpy_params);
 
 // Queue IDs
-const send_color_oq_e = @get_output_queue(0);  // 0 is reserved
-const send_color_oq_w = @get_output_queue(1);
-const send_color_oq_n = @get_output_queue(2);
-const send_color_oq_s = @get_output_queue(3);
+const send_color_oq_e = @get_output_queue(1);  // 0 is reserved
+const send_color_oq_w = @get_output_queue(2);
+const send_color_oq_n = @get_output_queue(3);
+const send_color_oq_s = @get_output_queue(4);
 
-const recv_color_iq_e = @get_input_queue(4);  // 0 and 1 are reserved
-const recv_color_iq_w = @get_input_queue(5);
-const recv_color_iq_n = @get_input_queue(6);
-const recv_color_iq_s = @get_input_queue(7);
+const recv_color_iq_e = @get_input_queue(2);  // 0 and 1 are reserved
+const recv_color_iq_w = @get_input_queue(3);
+const recv_color_iq_n = @get_input_queue(4);
+const recv_color_iq_s = @get_input_queue(5);
 
 const is_corner = (col == 0 or col == pe_width-1) and (row == 0 or row == pe_height-1);
 const exit_task_id: local_task_id = @get_local_task_id(9);
@@ -82,8 +84,8 @@ var receive_count: i16 = 0;
 var send_count: i16 = 0;
 var iteration_count: i16 = 0;
 var weights: [radius+1]f32;
-var own_values: [tile_height + 2*radius, tile_width + 2*radius+1]f32;
-var buffer: [tile_height + 2*radius, tile_width + 2*radius+1]f32;
+var own_values: [tile_height + 2*radius, tile_width + 2*radius+1]f32 linksection(".own_values");
+var buffer: [tile_height + 2*radius, tile_width + 2*radius+1]f32 linksection(".buffer");
 
 // pointers
 var weights_ptr = &weights;
@@ -105,11 +107,6 @@ const buffer_recv_south_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{rad
 const buffer_recv_west_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> buffer[radius + i, j] });
 const buffer_recv_east_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> buffer[radius + i, tile_width + radius + j] });
 
-// var buffer_shift_up_center_dsd_array: [radius]mem4d_dsd;
-// var buffer_shift_down_center_dsd_array: [radius]mem4d_dsd;
-// var buffer_shift_left_center_dsd_array: [radius]mem4d_dsd;
-// var buffer_shift_right_center_dsd_array: [radius]mem4d_dsd;
-
 // communication DSDs
 const send_north_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_n_col, .extent = tile_width*radius, .output_queue = send_color_oq_n });
 const send_south_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_s_col, .extent = tile_width*radius, .output_queue = send_color_oq_s });
@@ -122,18 +119,6 @@ const recv_west_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_w_col, .extent
 const recv_east_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_e_col, .extent = tile_height*radius, .input_queue = recv_color_iq_e });
 
 var _wait_var: i16 = 0;
-
-
-// fn init_buffer_shift_dsd_arrays() void {
-//   for (@range(i16, radius)) |k| {
-//     var shift = k+1;
-//     buffer_shift_up_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[radius - shift + i, radius + j] });
-//     buffer_shift_down_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[radius + shift + i, radius + j] });
-//     buffer_shift_left_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[radius + i, radius - shift + j] });
-//     buffer_shift_right_center_dsd_array[k] = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[radius + i, radius + shift + j] });
-//   }
-// }
-
 
 
 // function that initializes weights
@@ -248,12 +233,17 @@ fn receive_task() void {
       var down_shift_dsd = @increment_dsd_offset(buffer_center_dsd, i*(tile_width+2*radius+1), f32);
       var left_shift_dsd = @increment_dsd_offset(buffer_center_dsd, -i, f32);
       var right_shift_dsd = @increment_dsd_offset(buffer_center_dsd, i, f32);
+
       
       // add shifted dsds to own_values
       // @fadds(own_values_dsd, own_values_dsd, up_shift_dsd);
+      // _wait_var += 1;
       // @fadds(own_values_dsd, own_values_dsd, down_shift_dsd);
+      // _wait_var += 1;
       // @fadds(own_values_dsd, own_values_dsd, left_shift_dsd);
+      // _wait_var += 1;
       // @fadds(own_values_dsd, own_values_dsd, right_shift_dsd);
+      // _wait_var += 1;
 
       // add multiple of dsd to own_values with fused multiply add
       @fmacs(own_values_dsd, own_values_dsd, up_shift_dsd, weight);
