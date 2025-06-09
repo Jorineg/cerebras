@@ -6,6 +6,6 @@ cslc layout.csl \
 --memcpy \
 --channels=1 \
 --arch=wse2 \
---link-section-start-address-bytes=".own_values:20960,.buffer:40960" \
+--link-section-start-address-bytes=".buffer1:20960,.buffer2:40960" \
 -o out
 cs_python run.py --name out
