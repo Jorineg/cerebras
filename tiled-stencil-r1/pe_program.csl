@@ -1,0 +1,446 @@
+// cycle count evaluation (6x6 tile, radius=1 -> 4*36 fmacs + 36 fmuls)
+// 1.  3827->4280 = 453
+// 2.  4280->4763 = 483
+// 3.  4763->5250 = 487
+// 4.  5250->5733 = 483
+
+// 505 cycles per iteration on wse3
+
+
+// 1 cycles per fmacs for up down shifted
+// 1 cycle per fmacs for left right shifted
+// 10 cycles for starting fmacs (probaply moving dsd to dsr) -> 50 cycles per iteration. Can be saved by using dsrs from the start.
+// 1 cycle for fmuls
+
+
+// communication
+// 6040 -> 6184 = 144 cycles
+// Theoretical:
+// send and receive values: 6*4*2=48 values and 48 cycles
+
+// fuls: 36
+// fmacs: 4*36*1 = 144
+// communication: 144
+// other??: 50
+// total: 36+144+144+50 = 374
+
+// lower bound calculation: 36*5/s = 180/s
+
+
+// const simprint = @import_module("<simprint>");
+
+// params
+param memcpy_params: comptime_struct;
+param is_border: bool;
+
+param send_e_col: color;
+param send_w_col: color;
+param send_n_col: color;
+param send_s_col: color;
+
+param recv_e_col: color;
+param recv_w_col: color;
+param recv_n_col: color;
+param recv_s_col: color;
+
+param num_iterations: i16;
+param row: i16;
+param col: i16;
+param pe_width: i16;
+param pe_height: i16;
+param tile_width: i16;
+param tile_height: i16;
+
+// consts
+const sys_mod = @import_module("<memcpy/memcpy>", memcpy_params);
+
+// Queue IDs
+const send_color_oq_e = @get_output_queue(1);  // 0 is reserved
+const send_color_oq_w = @get_output_queue(2);
+const send_color_oq_n = @get_output_queue(3);
+const send_color_oq_s = @get_output_queue(4);
+
+const recv_color_iq_e = @get_input_queue(2);  // 0 and 1 are reserved
+const recv_color_iq_w = @get_input_queue(3);
+const recv_color_iq_n = @get_input_queue(4);
+const recv_color_iq_s = @get_input_queue(5);
+
+const is_corner = (col == 0 or col == pe_width-1) and (row == 0 or row == pe_height-1);
+const exit_task_id: local_task_id = @get_local_task_id(9);
+const receive_east_task_id: local_task_id = @get_local_task_id(10);
+const receive_west_task_id: local_task_id = @get_local_task_id(11);
+const receive_north_task_id: local_task_id = @get_local_task_id(12);
+const receive_south_task_id: local_task_id = @get_local_task_id(13);
+const send_west_task_id: local_task_id = @get_local_task_id(14);
+const send_east_task_id: local_task_id = @get_local_task_id(15);
+const send_north_task_id: local_task_id = @get_local_task_id(16);
+const send_south_task_id: local_task_id = @get_local_task_id(17);
+
+const loop_task_id: local_task_id = @get_local_task_id(18);
+
+const radius: i16 = 1;
+
+var receive_count: i16 = 0;
+var send_count: i16 = 0;
+var iteration_count: i16 = 0;
+var weights: [2]f32;
+var weights_0: f32;
+var weights_1: f32;
+var buffer1: [tile_height + 2*radius, tile_width + 2*radius+1]f32 linksection(".buffer1");
+var buffer2: [tile_height + 2*radius, tile_width + 2*radius+1]f32 linksection(".buffer2");
+
+// pointers
+var weights_ptr = &weights;
+var buffer1_ptr = &buffer1;
+var buffer2_ptr = &buffer2;
+
+// mem DSDs
+// const all_buffer1_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height + 2*radius, tile_width + 2*radius} -> buffer1[i, j] });
+// const all_buffer2_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height + 2*radius, tile_width + 2*radius} -> buffer2[i, j] });
+const buffer1_center_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer1[radius + i, radius + j] });
+const buffer2_center_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer2[radius + i, radius + j] });
+
+const buffer1_send_north_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> buffer1[radius + i, radius + j] });
+const buffer1_send_south_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> buffer1[tile_height + i, j + radius] });
+const buffer1_send_west_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> buffer1[i + radius, j + radius] });
+const buffer1_send_east_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> buffer1[i + radius, tile_width + j] });
+
+const buffer2_send_north_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> buffer2[radius + i, radius + j] });
+const buffer2_send_south_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> buffer2[tile_height + i, radius + j] });
+const buffer2_send_west_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> buffer2[i + radius, j + radius] });
+const buffer2_send_east_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> buffer2[i + radius, tile_width + j] });
+
+const buffer1_recv_north_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> buffer1[i, radius + j] });
+const buffer1_recv_south_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> buffer1[tile_height + radius + i, radius + j] });
+const buffer1_recv_west_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> buffer1[radius + i, j] });
+const buffer1_recv_east_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> buffer1[radius + i, tile_width + radius + j] });
+
+const buffer2_recv_north_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> buffer2[i, radius + j] });
+const buffer2_recv_south_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{radius, tile_width} -> buffer2[tile_height + radius + i, radius + j] });
+const buffer2_recv_west_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> buffer2[radius + i, j] });
+const buffer2_recv_east_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, radius} -> buffer2[radius + i, tile_width + radius + j] });
+
+const buffer1_up_shift_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer1[radius + i - 1, radius + j] });
+const buffer1_down_shift_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer1[radius + i + 1, radius + j] });
+const buffer1_left_shift_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer1[radius + i, radius + j - 1] });
+const buffer1_right_shift_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer1[radius + i, radius + j + 1] });
+const buffer2_up_shift_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer2[radius + i - 1, radius + j] });
+const buffer2_down_shift_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer2[radius + i + 1, radius + j] });
+const buffer2_left_shift_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer2[radius + i, radius + j - 1] });
+const buffer2_right_shift_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer2[radius + i, radius + j + 1] });
+
+// communication DSDs
+const send_north_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_n_col, .extent = tile_width*radius, .output_queue = send_color_oq_n });
+const send_south_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_s_col, .extent = tile_width*radius, .output_queue = send_color_oq_s });
+const send_west_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_w_col, .extent = tile_height*radius, .output_queue = send_color_oq_w });
+const send_east_dsd = @get_dsd(fabout_dsd, .{ .fabric_color = send_e_col, .extent = tile_height*radius, .output_queue = send_color_oq_e });
+
+const recv_north_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_n_col, .extent = tile_width*radius, .input_queue = recv_color_iq_n });
+const recv_south_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_s_col, .extent = tile_width*radius, .input_queue = recv_color_iq_s });
+const recv_west_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_w_col, .extent = tile_height*radius, .input_queue = recv_color_iq_w });
+const recv_east_dsd = @get_dsd(fabin_dsd, .{ .fabric_color = recv_e_col, .extent = tile_height*radius, .input_queue = recv_color_iq_e });
+
+
+// operations:
+// @fmuls(bufferX_center_dsd, bufferY_center_dsd, weights[0]);
+// @fmacs(bufferX_center_dsd, bufferX_center_dsd, bufferY_DIRECTION_shift_dsd, weight);
+// @fmovs(send_DIRECTION_dsd, bufferX_send_DIRECTION_dsd, .{.async=true, .activate=send_DIRECTION_task});
+// @fmovs(bufferX_recv_DIRECTION_dsd, recv_DIRECTION_dsd, .{.async=true, .activate=receive_DIRECTION_task});
+
+// dsrs
+// dest dsds:
+const buffer1_recv_north_dsr_dest_0 = @get_dsr(dsr_dest, 0);
+const buffer1_recv_south_dsr_dest_1 = @get_dsr(dsr_dest, 1);
+const buffer1_recv_west_dsr_dest_2 = @get_dsr(dsr_dest, 2);
+const buffer1_recv_east_dsr_dest_3 = @get_dsr(dsr_dest, 3);
+const buffer2_recv_north_dsr_dest_4 = @get_dsr(dsr_dest, 4);
+const buffer2_recv_south_dsr_dest_5 = @get_dsr(dsr_dest, 5);
+const buffer2_recv_west_dsr_dest_6 = @get_dsr(dsr_dest, 6);
+const buffer2_recv_east_dsr_dest_7 = @get_dsr(dsr_dest, 7);
+
+const send_north_dsr_dest_8 = @get_dsr(dsr_dest, 8);
+const send_south_dsr_dest_9 = @get_dsr(dsr_dest, 9);
+const send_west_dsr_dest_10 = @get_dsr(dsr_dest, 10);
+const send_east_dsr_dest_11 = @get_dsr(dsr_dest, 11);
+
+// src0 dsds:
+
+
+// src1 dsds:
+const buffer1_send_north_dsr_src1_0 = @get_dsr(dsr_src1, 0);
+
+
+var _wait_var: i16 = 0;
+
+
+// function that initializes weights
+// divide weights to not have to divide in the loop
+// first weight is for center element, others are for neighbors
+// so that sum of w[0] + 4*w[1] + 4*w[2] + ... + 4*w[radius] = 1
+fn init_weights() void {
+  var sum: f32 = 0.0;
+  for (@range(i16, radius+1)) |i| {
+    sum += if (i == 0) weights[i] else 4.0*weights[i];
+  }
+  for (@range(i16, radius+1)) |i| {
+    weights[i] /= sum;
+  }
+}
+
+task loop_task() void {
+
+  // simprint.fmt_with_coords("loop task begin", .{});
+
+  @block(loop_task_id);
+
+  // send cropped buffer to neighbors
+  send_to_neighbors();
+
+  //receive data from all directions and store in buffer
+  receive_from_neighbors();
+}
+
+fn send_task() void {
+  send_count += 1;
+
+  var max_send: i16 = 4;
+  if (is_corner) {
+    max_send = 2;
+  } else if (is_border) {
+    max_send = 3;
+  }
+  
+  if (send_count < max_send) {
+    return;
+  }
+  send_count = 0;
+  @unblock(loop_task_id);
+}
+
+task send_west_task() void {
+  send_task();
+}
+
+task send_east_task() void {
+  send_task();
+}
+
+task send_north_task() void {
+  send_task();
+}
+
+task send_south_task() void {
+  send_task();
+}
+
+task receive_east_task() void {
+  receive_task();
+}
+
+task receive_west_task() void {
+  receive_task();
+}
+
+task receive_north_task() void {
+  receive_task();
+}
+
+task receive_south_task() void {
+  receive_task();
+}
+
+fn receive_task() void {
+  receive_count += 1;
+  var max_receive: i16 = 4;
+  
+  if (is_corner) {
+    max_receive = 2;
+  } else if (is_border) {
+    max_receive = 3;
+  }
+
+  if (receive_count < max_receive) {
+    return;
+  }
+  receive_count = 0;
+
+  // if is_border is true: return
+  var destination_dsd = if (iteration_count % 2 == 0) buffer2_center_dsd else buffer1_center_dsd;
+  var source_dsd = if (iteration_count % 2 == 0) buffer1_center_dsd else buffer2_center_dsd;
+  if (!is_border) {
+
+
+    // multiply own_values with weights[0]
+    @fmuls(destination_dsd, source_dsd, weights[0]);
+    
+    // // multiply buffer with weight
+    // const weight: f32 = if (i == 1) weights[i] else weights[i]/weights[i-1];
+    // @fmuls(all_buffer_dsd, all_buffer_dsd, weight);
+    
+    // // add shifted dsds to own_values
+    // @fadds(destination_dsd, destination_dsd, up_shift_dsd);
+    // _wait_var += 1;
+    // @fadds(destination_dsd, destination_dsd, down_shift_dsd);
+    // _wait_var += 1;
+    // @fadds(destination_dsd, destination_dsd, left_shift_dsd);
+    // _wait_var += 1;
+    // @fadds(destination_dsd, destination_dsd, right_shift_dsd);
+    // _wait_var += 1;
+
+    
+    // add multiple of dsd to own_values with fused multiply add
+    const weight: f32 = weights[i];
+    @fmacs(destination_dsd, destination_dsd, up_shift_dsd, weight);
+    _wait_var += 1;  // wait for 1 cycle
+    @fmacs(destination_dsd, destination_dsd, down_shift_dsd, weight);
+    _wait_var += 1;
+    @fmacs(destination_dsd, destination_dsd, left_shift_dsd, weight);
+    _wait_var += 1;
+    @fmacs(destination_dsd, destination_dsd, right_shift_dsd, weight);
+    _wait_var += 1;
+  }
+
+  iteration_count += 1;
+  if (iteration_count < num_iterations) {
+    @activate(loop_task_id);
+  }else{
+    @activate(exit_task_id);
+  }
+}
+
+
+fn send_to_neighbors() void {
+  if (iteration_count % 2 == 0) {
+    // send west
+    if(col != 0){
+      @fmovs(send_west_dsd, buffer1_send_west_dsd, .{.async=true, .activate=send_west_task});
+    }
+    //send east
+    if(col != pe_width-1){
+      @fmovs(send_east_dsd, buffer1_send_east_dsd, .{.async= true, .activate=send_east_task});
+    }
+    // send north
+    if(row != 0){
+      @fmovs(send_north_dsd, buffer1_send_north_dsd, .{.async= true, .activate=send_north_task});
+    }
+    // send south
+    if(row != pe_height-1){
+      @fmovs(send_south_dsd, buffer1_send_south_dsd, .{.async= true, .activate=send_south_task});
+    }
+  } else {
+    // send west
+    if(col != 0){
+      @fmovs(send_west_dsd, buffer2_send_west_dsd, .{.async=true, .activate=send_west_task});
+    }
+    //send east
+    if(col != pe_width-1){
+      @fmovs(send_east_dsd, buffer2_send_east_dsd, .{.async= true, .activate=send_east_task});
+    }
+    // send north
+    if(row != 0){
+      @fmovs(send_north_dsd, buffer2_send_north_dsd, .{.async= true, .activate=send_north_task});
+    }
+    // send south
+    if(row != pe_height-1){
+      @fmovs(send_south_dsd, buffer2_send_south_dsd, .{.async= true, .activate=send_south_task});
+    }
+  }
+}
+
+fn receive_from_neighbors() void {
+  if (iteration_count % 2 == 0) {
+    // receive west
+    if(col != 0){
+      @fmovs(buffer1_recv_west_dsd, recv_west_dsd, .{.async=true, .activate=receive_west_task});
+    }
+    //receive east
+    if(col != pe_width-1){
+      @fmovs(buffer1_recv_east_dsd, recv_east_dsd, .{.async=true, .activate=receive_east_task});
+    }
+    // receive north
+    if(row != 0){
+      @fmovs(buffer1_recv_north_dsd, recv_north_dsd, .{.async=true, .activate=receive_north_task});
+    }
+    // receive south
+    if(row != pe_height-1){
+      @fmovs(buffer1_recv_south_dsd, recv_south_dsd, .{.async=true, .activate=receive_south_task});
+    }
+  } else {
+    // receive west
+    if(col != 0){
+      @fmovs(buffer2_recv_west_dsd, recv_west_dsd, .{.async=true, .activate=receive_west_task});
+    }
+    //receive east
+    if(col != pe_width-1){
+      @fmovs(buffer2_recv_east_dsd, recv_east_dsd, .{.async=true, .activate=receive_east_task});
+    }
+    // receive north
+    if(row != 0){
+      @fmovs(buffer2_recv_north_dsd, recv_north_dsd, .{.async=true, .activate=receive_north_task});
+    }
+    // receive south
+    if(row != pe_height-1){
+      @fmovs(buffer2_recv_south_dsd, recv_south_dsd, .{.async=true, .activate=receive_south_task});
+    }
+  }
+}
+
+
+fn compute() void {
+  init_weights();
+  @fmovs(buffer2_center_dsd, buffer1_center_dsd);
+  @activate(loop_task_id);
+}
+
+
+task exit_task() void {
+  // simprint.fmt_with_coords("exit task begin", .{});
+
+  // copy buffer2 to buffer1 if iteration_count is odd
+  if (iteration_count % 2 == 1) {
+    @fmovs(buffer1_center_dsd, buffer2_center_dsd);
+  }
+  sys_mod.unblock_cmd_stream();
+}
+
+comptime {
+  // When exit_task_id is activated, exit_task will execute
+  @bind_local_task(exit_task, exit_task_id);
+  @bind_local_task(receive_east_task, receive_east_task_id);
+  @bind_local_task(receive_west_task, receive_west_task_id);
+  @bind_local_task(receive_north_task, receive_north_task_id);
+  @bind_local_task(receive_south_task, receive_south_task_id);
+
+  @bind_local_task(send_west_task, send_west_task_id);
+  @bind_local_task(send_east_task, send_east_task_id);
+  @bind_local_task(send_north_task, send_north_task_id);
+  @bind_local_task(send_south_task, send_south_task_id);
+
+  @bind_local_task(loop_task, loop_task_id);
+
+  // On WSE-3, we must explicitly initialize input and output queues
+  if (@is_arch("wse3")) {
+    @initialize_queue(send_color_oq_e, .{ .color = send_e_col });
+    @initialize_queue(send_color_oq_w, .{ .color = send_w_col });
+    @initialize_queue(send_color_oq_n, .{ .color = send_n_col });
+    @initialize_queue(send_color_oq_s, .{ .color = send_s_col });
+
+    @initialize_queue(recv_color_iq_e, .{ .color = recv_e_col });
+    @initialize_queue(recv_color_iq_w, .{ .color = recv_w_col });
+    @initialize_queue(recv_color_iq_n, .{ .color = recv_n_col });
+    @initialize_queue(recv_color_iq_s, .{ .color = recv_s_col });
+  }else{
+
+    // must also be initialized on WSE-2 manually if using dsrs
+    // not documented !!!
+    @initialize_queue(recv_color_iq_e, .{ .color = recv_e_col });
+    @initialize_queue(recv_color_iq_w, .{ .color = recv_w_col });
+    @initialize_queue(recv_color_iq_n, .{ .color = recv_n_col });
+    @initialize_queue(recv_color_iq_s, .{ .color = recv_s_col });
+  }
+
+  @export_symbol(buffer1_ptr, "values");
+  @export_symbol(weights_ptr, "weights");
+  @export_symbol(compute);
+  @export_symbol(buffer2_ptr, "buffer");
+}

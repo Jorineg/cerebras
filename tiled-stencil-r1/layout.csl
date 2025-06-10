@@ -1,0 +1,133 @@
+param w: i16;             // width of matrix to perform stencil on
+param h: i16;             // height of matrix to perform stencil on
+param tile_width: i16;   // width of each tile in x direction
+param tile_height: i16;   // height of each tile in y direction
+param radius: i16;          // radius of the stencil
+param num_iterations: i16;         // number of iterations to run the stencil
+
+// radius must be smaller or equal to the min(tile_width, tile_height)
+// acutal number of PEs is given by w/tile_width * h/tile_height
+// w-2 must be a multiple of tile_width and h-2 must be a multiple of tile_height
+
+// Calculate dimensions of the core computational region (original matrix excluding radius border)
+const w_compute_region = w - 2 * radius;
+const h_compute_region = h - 2 * radius;
+
+// Number of inner PEs (those that perform computation)
+const num_pe_x_inner = w_compute_region / tile_width;
+const num_pe_y_inner = h_compute_region / tile_height;
+
+// Total number of PEs including the border PEs
+const num_pe_x = num_pe_x_inner + 2;
+const num_pe_y = num_pe_y_inner + 2;
+
+// Colors
+const e_to_w_col_1: color = @get_color(1);
+const e_to_w_col_2: color = @get_color(2);
+const w_to_e_col_1: color = @get_color(3);
+const w_to_e_col_2: color = @get_color(4);
+const n_to_s_col_1: color = @get_color(5);
+const n_to_s_col_2: color = @get_color(6);
+const s_to_n_col_1: color = @get_color(7);
+const s_to_n_col_2: color = @get_color(8);
+
+const memcpy = @import_module("<memcpy/get_params>", .{
+  .width = num_pe_x,
+  .height = num_pe_y,
+});
+
+fn validate_parameters() void {
+  @comptime_assert(radius >= 1, "radius must be at least 1.");
+  @comptime_assert(w >= 2 * radius + tile_width, "w too small for radius and tile_width. Must be at least 2*radius + tile_width.");
+  @comptime_assert(h >= 2 * radius + tile_height, "h too small for radius and tile_height. Must be at least 2*radius + tile_height.");
+  @comptime_assert(w_compute_region > 0, "w - 2*radius must be positive. Original width too small for radius.");
+  @comptime_assert(h_compute_region > 0, "h - 2*radius must be positive. Original height too small for radius.");
+  @comptime_assert(w_compute_region % tile_width == 0, "w - 2*radius must be a multiple of tile_width");
+  @comptime_assert(h_compute_region % tile_height == 0, "h - 2*radius must be a multiple of tile_height");
+  @comptime_assert(radius <= tile_width, "radius must be smaller or equal to tile_width");
+  @comptime_assert(radius <= tile_height, "radius must be smaller or equal to tile_height");
+}
+
+layout {
+  validate_parameters();
+
+  // PE coordinates are (column, row)
+  @set_rectangle(num_pe_x, num_pe_y);
+
+  for (@range(i16, num_pe_x)) |col| {
+    for (@range(i16, num_pe_y)) |row| {
+      const is_static_region: bool = col<1 or row<1 or col>=num_pe_x-1 or row>=num_pe_y-1;
+
+      var basic_params = .{
+        .memcpy_params = memcpy.get_params(col),
+        .is_border = is_static_region,
+        .num_iterations = num_iterations,
+        .row = row,
+        .col = col,
+        .pe_width = num_pe_x,
+        .pe_height = num_pe_y,
+        .radius = radius,
+        .tile_width = tile_width,
+        .tile_height = tile_height,
+      };
+
+      var color_params = .{
+        .send_e_col = w_to_e_col_1,
+        .send_w_col = e_to_w_col_1,
+        .send_n_col = s_to_n_col_1,
+        .send_s_col = n_to_s_col_1,
+        .recv_e_col = e_to_w_col_2,
+        .recv_w_col = w_to_e_col_2,
+        .recv_n_col = n_to_s_col_2,
+        .recv_s_col = s_to_n_col_2,
+      };
+
+      // checkerboard pattern
+      if(col%2 == row%2){
+        var params = @concat_structs(basic_params, color_params);
+        @set_tile_code(col, row, "pe_program.csl", params);
+
+        @set_color_config(col, row, e_to_w_col_1, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
+        @set_color_config(col, row, w_to_e_col_1, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
+        @set_color_config(col, row, n_to_s_col_1, .{.routes = .{ .rx = .{RAMP}, .tx = .{SOUTH} }});
+        @set_color_config(col, row, s_to_n_col_1, .{.routes = .{ .rx = .{RAMP}, .tx = .{NORTH} }});
+
+        @set_color_config(col, row, e_to_w_col_2, .{.routes = .{ .rx = .{EAST}, .tx = .{RAMP} }});
+        @set_color_config(col, row, w_to_e_col_2, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
+        @set_color_config(col, row, n_to_s_col_2, .{.routes = .{ .rx = .{NORTH}, .tx = .{RAMP} }});
+        @set_color_config(col, row, s_to_n_col_2, .{.routes = .{ .rx = .{SOUTH}, .tx = .{RAMP} }});
+
+      }else{
+        color_params = .{
+          .send_e_col = w_to_e_col_2,
+          .send_w_col = e_to_w_col_2,
+          .send_n_col = s_to_n_col_2,
+          .send_s_col = n_to_s_col_2,
+          .recv_e_col = e_to_w_col_1,
+          .recv_w_col = w_to_e_col_1,
+          .recv_n_col = n_to_s_col_1,
+          .recv_s_col = s_to_n_col_1,
+        };
+
+        var params = @concat_structs(basic_params, color_params);
+        @set_tile_code(col, row, "pe_program.csl", params);
+
+        @set_color_config(col, row, e_to_w_col_1, .{.routes = .{ .rx = .{EAST}, .tx = .{RAMP} }});
+        @set_color_config(col, row, w_to_e_col_1, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});
+        @set_color_config(col, row, n_to_s_col_1, .{.routes = .{ .rx = .{NORTH}, .tx = .{RAMP} }});
+        @set_color_config(col, row, s_to_n_col_1, .{.routes = .{ .rx = .{SOUTH}, .tx = .{RAMP} }});
+
+        @set_color_config(col, row, e_to_w_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
+        @set_color_config(col, row, w_to_e_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
+        @set_color_config(col, row, n_to_s_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{SOUTH} }});
+        @set_color_config(col, row, s_to_n_col_2, .{.routes = .{ .rx = .{RAMP}, .tx = .{NORTH} }});
+      }
+    }
+  }
+
+  // export symbol names
+  @export_name("values", *[tile_height+2*radius, tile_width+2*radius+1]f32, true);
+  @export_name("weights", *[radius+1]f32, true);
+  @export_name("compute", fn()void);
+  @export_name("buffer", *[tile_height+2*radius, tile_width+2*radius+1]f32, true);
+}
