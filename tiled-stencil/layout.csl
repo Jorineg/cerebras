@@ -6,8 +6,8 @@ param radius: i16;          // radius of the stencil
 param num_iterations: i16;         // number of iterations to run the stencil
 
 // radius must be smaller or equal to the min(tile_width, tile_height)
-// acutal number of PEs is given by w/tile_width * h/tile_height
-// w-2 must be a multiple of tile_width and h-2 must be a multiple of tile_height
+// acutal number of PEs is given by (w-2*radius)/tile_width+2 * (h-2*radius)/tile_height+2
+// w-2*radius must be a multiple of tile_width and h-2*radius must be a multiple of tile_height
 
 // Calculate dimensions of the core computational region (original matrix excluding radius border)
 const w_compute_region = w - 2 * radius;
@@ -53,22 +53,22 @@ layout {
 
   // PE coordinates are (column, row)
   @set_rectangle(num_pe_x, num_pe_y);
+  
+  const program_name = if(radius == 1) "pe_program_r1.csl" else "pe_program.csl";
 
   for (@range(i16, num_pe_x)) |col| {
     for (@range(i16, num_pe_y)) |row| {
-      const is_static_region: bool = col<1 or row<1 or col>=num_pe_x-1 or row>=num_pe_y-1;
 
       var basic_params = .{
         .memcpy_params = memcpy.get_params(col),
-        .is_border = is_static_region,
         .num_iterations = num_iterations,
-        .row = row,
-        .col = col,
-        .pe_width = num_pe_x,
-        .pe_height = num_pe_y,
+        .num_pe_x = num_pe_x,
+        .num_pe_y = num_pe_y,
         .radius = radius,
         .tile_width = tile_width,
         .tile_height = tile_height,
+        .row = row,
+        .col = col,
       };
 
       var color_params = .{
@@ -85,7 +85,7 @@ layout {
       // checkerboard pattern
       if(col%2 == row%2){
         var params = @concat_structs(basic_params, color_params);
-        @set_tile_code(col, row, "pe_program.csl", params);
+        @set_tile_code(col, row, program_name, params);
 
         @set_color_config(col, row, e_to_w_col_1, .{.routes = .{ .rx = .{RAMP}, .tx = .{WEST} }});
         @set_color_config(col, row, w_to_e_col_1, .{.routes = .{ .rx = .{RAMP}, .tx = .{EAST} }});
@@ -110,7 +110,7 @@ layout {
         };
 
         var params = @concat_structs(basic_params, color_params);
-        @set_tile_code(col, row, "pe_program.csl", params);
+        @set_tile_code(col, row, program_name, params);
 
         @set_color_config(col, row, e_to_w_col_1, .{.routes = .{ .rx = .{EAST}, .tx = .{RAMP} }});
         @set_color_config(col, row, w_to_e_col_1, .{.routes = .{ .rx = .{WEST}, .tx = .{RAMP} }});

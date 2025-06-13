@@ -87,6 +87,7 @@ var weights: [radius+1]f32;
 var own_values: [tile_height + 2*radius, tile_width + 2*radius+1]f32 linksection(".own_values");
 var buffer: [tile_height + 2*radius, tile_width + 2*radius+1]f32 linksection(".buffer");
 
+
 // pointers
 var weights_ptr = &weights;
 var own_values_ptr = &own_values;
@@ -247,13 +248,13 @@ fn receive_task() void {
 
       // add multiple of dsd to own_values with fused multiply add
       @fmacs(own_values_dsd, own_values_dsd, up_shift_dsd, weight);
-      _wait_var += 1;  // wait for 1 cycle
+      // _wait_var += 1;  // wait for 1 cycle
       @fmacs(own_values_dsd, own_values_dsd, down_shift_dsd, weight);
-      _wait_var += 1;
+      // _wait_var += 1;
       @fmacs(own_values_dsd, own_values_dsd, left_shift_dsd, weight);
-      _wait_var += 1;
+      // _wait_var += 1;
       @fmacs(own_values_dsd, own_values_dsd, right_shift_dsd, weight);
-      _wait_var += 1;
+      // _wait_var += 1;
     }
   }
 

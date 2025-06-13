@@ -1,0 +1,25 @@
+param radius: i16;
+
+var _wait_var: i16 = 0;
+extern var weights: [radius+1]f32;
+
+
+// function that initializes weights
+// divide weights to not have to divide in the loop
+// first weight is for center element, others are for neighbors
+// so that sum of w[0] + 4*w[1] + 4*w[2] + ... + 4*w[radius] = 1
+fn init_weights() void {
+  var sum: f32 = 0.0;
+  for (@range(i16, radius+1)) |i| {
+    sum += if (i == 0) weights[i] else 4.0*weights[i];
+  }
+  for (@range(i16, radius+1)) |i| {
+    weights[i] /= sum;
+  }
+}
+
+fn wait_cycles(cycles: i16) void {
+  for (@range(i16, cycles)) |_| {
+    _wait_var += 1;
+  }
+}

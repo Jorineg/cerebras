@@ -1,0 +1,19 @@
+const color_params = struct {
+  send_e_col: color,
+  send_w_col: color,
+  send_n_col: color,
+  send_s_col: color,
+  recv_e_col: color,
+  recv_w_col: color,
+  recv_n_col: color,
+  recv_s_col: color,
+};
+
+const dsd_params =  struct {
+  color_params: color_params,
+  tile_width: i16,
+  tile_height: i16,
+  radius: i16,
+  buffer_width: i16,
+  buffer_height: i16,
+};
