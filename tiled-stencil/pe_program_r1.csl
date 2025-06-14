@@ -83,7 +83,9 @@ task loop_task() void {
 
   load_communication_dsds_to_dsrs();
 
-  @block(consts.compute_task_id);
+  if (is_border) {
+    @block(consts.compute_task_id);
+  }
 
   // copy own_values to buffer
   // @fmovs(dsrs.buffer_center_dsr_dest_9, dsrs.own_values_dsr_src1_9);
@@ -94,7 +96,9 @@ task loop_task() void {
   //receive data from all directions and store in buffer
   receive_from_neighbors();
 
-  iteration_count += 1;
+  if(!is_border) {
+    @activate(consts.compute_task_id);
+  }
 }
 
 task compute_task() void {
@@ -128,6 +132,7 @@ task compute_task() void {
     // @fmacs(dsrs.buffer_center_dsr_dest_9, dsrs.own_values_dsr_src0_9, dsrs.buffer_center_dsr_src1_9, weights[0]);
   }
 
+  iteration_count += 1;
   @activate(consts.loop_task_id);
 }
 
@@ -217,15 +222,29 @@ fn load_communication_dsds_to_dsrs() void {
 
 
 fn load_other_dsds_to_dsrs() void {
-  @load_to_dsr(dsrs.send_north_dsr_dest_5, dsds.send_north_dsd, .{ .async=true, .activate=send_north_task });
-  @load_to_dsr(dsrs.send_south_dsr_dest_6, dsds.send_south_dsd, .{ .async=true, .activate=send_south_task });
-  @load_to_dsr(dsrs.send_west_dsr_dest_7, dsds.send_west_dsd, .{ .async=true, .activate=send_west_task });
-  @load_to_dsr(dsrs.send_east_dsr_dest_8, dsds.send_east_dsd, .{ .async=true, .activate=send_east_task });
+  if (is_border) {
+    @load_to_dsr(dsrs.send_north_dsr_dest_5, dsds.send_north_dsd, .{ .async=true, .activate=send_north_task });
+    @load_to_dsr(dsrs.send_south_dsr_dest_6, dsds.send_south_dsd, .{ .async=true, .activate=send_south_task });
+    @load_to_dsr(dsrs.send_west_dsr_dest_7, dsds.send_west_dsd, .{ .async=true, .activate=send_west_task });
+    @load_to_dsr(dsrs.send_east_dsr_dest_8, dsds.send_east_dsd, .{ .async=true, .activate=send_east_task });
 
-  @load_to_dsr(dsrs.recv_north_dsr_src1_11, dsds.recv_north_dsd, .{ .async=true, .activate=receive_north_task });
-  @load_to_dsr(dsrs.recv_south_dsr_src1_12, dsds.recv_south_dsd, .{ .async=true, .activate=receive_south_task });
-  @load_to_dsr(dsrs.recv_west_dsr_src1_13, dsds.recv_west_dsd, .{ .async=true, .activate=receive_west_task });
-  @load_to_dsr(dsrs.recv_east_dsr_src1_14, dsds.recv_east_dsd, .{ .async=true, .activate=receive_east_task });
+    @load_to_dsr(dsrs.recv_north_dsr_src1_11, dsds.recv_north_dsd, .{ .async=true, .activate=receive_north_task });
+    @load_to_dsr(dsrs.recv_south_dsr_src1_12, dsds.recv_south_dsd, .{ .async=true, .activate=receive_south_task });
+    @load_to_dsr(dsrs.recv_west_dsr_src1_13, dsds.recv_west_dsd, .{ .async=true, .activate=receive_west_task });
+    @load_to_dsr(dsrs.recv_east_dsr_src1_14, dsds.recv_east_dsd, .{ .async=true, .activate=receive_east_task });
+  }else{
+    @load_to_dsr(dsrs.send_north_dsr_dest_5, dsds.send_north_dsd, .{ .async=true });
+    @load_to_dsr(dsrs.send_south_dsr_dest_6, dsds.send_south_dsd, .{ .async=true });
+    @load_to_dsr(dsrs.send_west_dsr_dest_7, dsds.send_west_dsd, .{ .async=true });
+    @load_to_dsr(dsrs.send_east_dsr_dest_8, dsds.send_east_dsd, .{ .async=true });
+    @load_to_dsr(dsrs.recv_north_dsr_src1_11, dsds.recv_north_dsd, .{ .async=true });
+    @load_to_dsr(dsrs.recv_south_dsr_src1_12, dsds.recv_south_dsd, .{ .async=true });
+    @load_to_dsr(dsrs.recv_west_dsr_src1_13, dsds.recv_west_dsd, .{ .async=true });
+    @load_to_dsr(dsrs.recv_east_dsr_src1_14, dsds.recv_east_dsd, .{ .async=true });
+
+  }
+
+
 
   @load_to_dsr(dsrs.own_values_dsr_src0_1, dsds.own_values_dsd);
   @load_to_dsr(dsrs.own_values_dsr_src0_2, dsds.own_values_dsd);
@@ -250,7 +269,8 @@ fn load_other_dsds_to_dsrs() void {
 }
 
 comptime {
-  // task_priority.update_task_priority(consts.loop_task_id, task_priority.level.LOW);
+  task_priority.update_task_priority(consts.compute_task_id, task_priority.level.LOW);
+  task_priority.update_task_priority(consts.loop_task_id, task_priority.level.LOW);
 
   // When exit_task_id is activated, exit_task will execute
   @bind_local_task(exit_task, consts.exit_task_id);
