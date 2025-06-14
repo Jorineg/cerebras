@@ -9,3 +9,7 @@ debug
 */wio_flow.json
 */sim_stats.json
 */simconfig.json
+*/python.log
+*/error_heatmap.png
+*/out_wse2
+*/out_wse3

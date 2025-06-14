@@ -1,10 +1,11 @@
 #!/usr/bin/env cs_python
-
-WEIGHTS = [1.0, 0.5]
-
 import argparse
 import json
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend for WSL/headless environments
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 
 from cerebras.sdk.runtime.sdkruntimepybind import (
     SdkRuntime,
@@ -17,6 +18,7 @@ from stencil import star_stencil, print_matrix
 # Read arguments
 parser = argparse.ArgumentParser()
 parser.add_argument("--name", help="the test compile output dir")
+parser.add_argument("--num-iterations", type=int, default=1)
 parser.add_argument("--cmaddr", help="IP:port for CS system")
 args = parser.parse_args()
 
@@ -30,7 +32,9 @@ height = int(compile_data["params"]["h"])
 tile_width = int(compile_data["params"]["tile_width"])
 tile_height = int(compile_data["params"]["tile_height"])
 radius = int(compile_data["params"]["radius"])
-num_iterations = int(compile_data["params"]["num_iterations"])
+num_iterations = args.num_iterations
+
+WEIGHTS = [1/2**i for i in range(radius+1)]
 
 assert radius == len(WEIGHTS) - 1, "radius must be equal to the number of weights - 1"
 
@@ -65,7 +69,7 @@ print_matrix(result_expected, "Result Matrix (python computation)")
 runner = SdkRuntime(args.name, cmaddr=args.cmaddr)
 
 # Get symbols on device
-matrix_symbol = runner.get_id("values")
+buffer_symbol = runner.get_id("buffer")
 weights_symbol = runner.get_id("weights")
 
 # Load and run the program
@@ -152,7 +156,7 @@ device_matrix = create_padded_device_matrix(matrix, radius, tile_width, tile_hei
 
 # Copy matrix into matrix of PEs
 runner.memcpy_h2d(
-    matrix_symbol,
+    buffer_symbol,
     device_matrix, # This is already flattened and tiled correctly for the whole grid
     0, # dest_x
     0, # dest_y
@@ -167,8 +171,8 @@ runner.memcpy_h2d(
 
 print("copied matrix to device")
 
-# Launch the compute function on device
-runner.launch("compute", nonblock=False)
+# Launch the start function on device
+runner.launch("start", num_iterations, nonblock=False)
 
 print("launched compute on device")
 
@@ -177,7 +181,7 @@ result_device_flat = np.zeros(num_pe_y * num_pe_x * (tile_height + 2*radius) * (
 
 runner.memcpy_d2h(
     result_device_flat,
-    matrix_symbol,
+    buffer_symbol,
     0, # src_x
     0, # src_y
     num_pe_x, # width_in_pes
@@ -188,28 +192,6 @@ runner.memcpy_d2h(
     data_type=MemcpyDataType.MEMCPY_32BIT,
     nonblock=False,
 )
-
-# for debugging, copy buffer from 1,1 element to host
-buffer_symbol = runner.get_id("buffer")
-buffer_device_flat = np.zeros((tile_height + 2 * radius) * (tile_width + 2 * radius+1), dtype=np.float32)
-runner.memcpy_d2h(
-    buffer_device_flat,
-    buffer_symbol,
-    1, # src_x
-    1, # src_y
-    1, # width_in_pes
-    1, # height_in_pes
-    (tile_height + 2 * radius) * (tile_width + 2 * radius+1), # num_elements_per_pe
-    streaming=False,
-    order=MemcpyOrder.ROW_MAJOR,
-    data_type=MemcpyDataType.MEMCPY_32BIT,
-    nonblock=False,
-)
-
-print("copied buffer from device to host")
-buffer = buffer_device_flat.reshape(tile_height + 2 * radius, tile_width + 2 * radius+1)
-# print_matrix(buffer, "Buffer from device")
-
 
 # Untile the result, passing original dimensions height, width
 result = untile_padded_matrix(result_device_flat, radius, tile_width, tile_height, num_pe_y, num_pe_x)
@@ -228,5 +210,50 @@ print_matrix(result, "Result Matrix (device computation)")
 if result.shape != result_expected.shape:
     raise AssertionError(f"Shape mismatch! Device result: {result.shape}, Expected: {result_expected.shape}")
 
-np.testing.assert_allclose(result, result_expected, atol=0.01, rtol=0)
-print("SUCCESS!")
+try:
+    np.testing.assert_allclose(result, result_expected, atol=0.01, rtol=0)
+    print("SUCCESS!")
+except AssertionError as e:
+    print(f"Results do not match! {e}")
+    
+    # Calculate the error per element
+    error_matrix = np.abs(result - result_expected)
+    
+    # Create a heatmap of the error
+    plt.figure(figsize=(12, 8))
+    im = plt.imshow(error_matrix, cmap='viridis', aspect='equal')
+    plt.colorbar(im, label='Absolute Error')
+    plt.title('Error per Element (|Device Result - Expected Result|)')
+    plt.xlabel('Column Index')
+    plt.ylabel('Row Index')
+    
+    # Add black grid lines between pixels
+    ax = plt.gca()
+    ax.set_xticks(np.arange(-0.5, error_matrix.shape[1], 1), minor=True)
+    ax.set_yticks(np.arange(-0.5, error_matrix.shape[0], 1), minor=True)
+    ax.grid(which="minor", color="black", linestyle='-', linewidth=0.5)
+    ax.tick_params(which="minor", size=0)
+    
+    for pe_y in range(num_pe_y_inner_py):
+        for pe_x in range(num_pe_x_inner_py):
+            # Calculate matrix coordinates for this PE with border offset
+            start_x = radius + pe_x * tile_width - 0.5
+            start_y = radius + pe_y * tile_height - 0.5
+            
+            # Create red rectangle around this PE's tile
+            rect = Rectangle((start_x, start_y), tile_width, tile_height,
+                           linewidth=2, edgecolor='red', facecolor='none')
+            ax.add_patch(rect)
+    
+    # Save the heatmap as PNG
+    plt.savefig('error_heatmap.png', dpi=500, bbox_inches='tight')
+    print("Error heatmap saved as 'error_heatmap.png'")
+    
+    # Also save a summary
+    print(f"Maximum error: {np.max(error_matrix):.6f}")
+    print(f"Mean error: {np.mean(error_matrix):.6f}")
+    print(f"Number of elements with error > 0.01: {np.sum(error_matrix > 0.01)}")
+    
+    plt.close()
+
+    raise e

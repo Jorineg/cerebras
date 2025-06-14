@@ -15,10 +15,10 @@ extern var own_values: [buffer_height, buffer_width]f32;
 const buffer_center_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> buffer[radius + i, radius + j] });
 const own_values_dsd = @get_dsd(mem4d_dsd, .{ .tensor_access = |i, j|{tile_height, tile_width} -> own_values[radius + i, radius + j] });
 
-const own_values_send_north_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{tile_width} -> own_values[radius, radius + i] });
-const own_values_send_south_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{tile_width} -> own_values[tile_height, radius + i] });
-const own_values_send_west_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{tile_height} -> own_values[radius + i, radius] });
-const own_values_send_east_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{tile_height} -> own_values[radius + i, tile_width] });
+const buffer_send_north_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{tile_width} -> buffer[radius, radius + i] });
+const buffer_send_south_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{tile_width} -> buffer[tile_height, radius + i] });
+const buffer_send_west_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{tile_height} -> buffer[radius + i, radius] });
+const buffer_send_east_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{tile_height} -> buffer[radius + i, tile_width] });
 
 const buffer_recv_north_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{tile_width} -> buffer[0, radius + i] });
 const buffer_recv_south_dsd = @get_dsd(mem1d_dsd, .{ .tensor_access = |i|{tile_width} -> buffer[tile_height + radius, radius + i] });

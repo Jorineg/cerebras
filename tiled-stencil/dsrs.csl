@@ -1,8 +1,11 @@
 // instuctions
-// @fmovs(buffer_center_dsd, own_values_dsd);
+// @fmuls(own_values_dsd, up_shift_dsd, weight);
 // @fmacs(own_values_dsd, own_values_dsd, DIRECTION_shift_dsd, weight);
-// @fmovs(send_DIRECTION_dsd, own_values_send_DIRECTION_dsd, .{.async= true, .activate=send_DIRECTION_task});
+// @fmacs(buffer_center_dsd, own_values_dsd, buffer_center_dsd, weight);
+// @fmovs(send_DIRECTION_dsd, buffer_send_DIRECTION_dsd, .{.async= true, .activate=send_DIRECTION_task});
 // @fmovs(buffer_recv_DIRECTION_dsd, recv_DIRECTION_dsd, .{.async=true, .activate=receive_DIRECTION_task});
+// (@fmuls(own_values, own_values, weight);)
+
 
 // dsrs
 // dest dsrs
@@ -16,12 +19,14 @@ const send_south_dsr_dest_6 = @get_dsr(dsr_dest, 6);
 const send_west_dsr_dest_7 = @get_dsr(dsr_dest, 7);
 const send_east_dsr_dest_8 = @get_dsr(dsr_dest, 8);
 
-const buffer_recv_north_dsr_dest_9 = @get_dsr(dsr_dest, 9);
-const buffer_recv_south_dsr_dest_10 = @get_dsr(dsr_dest, 10);
-const buffer_recv_west_dsr_dest_11 = @get_dsr(dsr_dest, 11);
-const buffer_recv_east_dsr_dest_12 = @get_dsr(dsr_dest, 12);
+const buffer_center_dsr_dest_9 = @get_dsr(dsr_dest, 9);
+const own_values_dsr_dest_10 = @get_dsr(dsr_dest, 10);
 
-const buffer_center_dsr_dest_13 = @get_dsr(dsr_dest, 13);
+const buffer_recv_north_dsr_dest_11 = @get_dsr(dsr_dest, 11);
+const buffer_recv_south_dsr_dest_12 = @get_dsr(dsr_dest, 12);
+const buffer_recv_west_dsr_dest_13 = @get_dsr(dsr_dest, 13);
+const buffer_recv_east_dsr_dest_14 = @get_dsr(dsr_dest, 14);
+
 
 // src0 dsrs
 const own_values_dsr_src0_1 = @get_dsr(dsr_src0, 1);
@@ -29,6 +34,8 @@ const own_values_dsr_src0_2 = @get_dsr(dsr_src0, 2);
 const own_values_dsr_src0_3 = @get_dsr(dsr_src0, 3);
 const own_values_dsr_src0_4 = @get_dsr(dsr_src0, 4);
 
+const own_values_dsr_src0_9 = @get_dsr(dsr_src0, 9);
+const own_values_dsr_src0_10 = @get_dsr(dsr_src0, 10);
 
 // src1 dsrs
 const shift_up_dsr_src1_1 = @get_dsr(dsr_src1, 1);
@@ -36,14 +43,15 @@ const shift_down_dsr_src1_2 = @get_dsr(dsr_src1, 2);
 const shift_left_dsr_src1_3 = @get_dsr(dsr_src1, 3);
 const shift_right_dsr_src1_4 = @get_dsr(dsr_src1, 4);
 
-const own_values_send_north_dsr_src1_5 = @get_dsr(dsr_src1, 5);
-const own_values_send_south_dsr_src1_6 = @get_dsr(dsr_src1, 6);
-const own_values_send_west_dsr_src1_7 = @get_dsr(dsr_src1, 7);
-const own_values_send_east_dsr_src1_8 = @get_dsr(dsr_src1, 8);
+const buffer_send_north_dsr_src1_5 = @get_dsr(dsr_src1, 5);
+const buffer_send_south_dsr_src1_6 = @get_dsr(dsr_src1, 6);
+const buffer_send_west_dsr_src1_7 = @get_dsr(dsr_src1, 7);
+const buffer_send_east_dsr_src1_8 = @get_dsr(dsr_src1, 8);
 
-const recv_north_dsr_src1_9 = @get_dsr(dsr_src1, 9);
-const recv_south_dsr_src1_10 = @get_dsr(dsr_src1, 10);
-const recv_west_dsr_src1_11 = @get_dsr(dsr_src1, 11);
-const recv_east_dsr_src1_12 = @get_dsr(dsr_src1, 12);
+const own_values_dsr_src1_9 = @get_dsr(dsr_src1, 9);
+const buffer_center_dsr_src1_10 = @get_dsr(dsr_src1, 10);
 
-const own_values_dsr_src1_13 = @get_dsr(dsr_src1, 13);
+const recv_north_dsr_src1_11 = @get_dsr(dsr_src1, 11);
+const recv_south_dsr_src1_12 = @get_dsr(dsr_src1, 12);
+const recv_west_dsr_src1_13 = @get_dsr(dsr_src1, 13);
+const recv_east_dsr_src1_14 = @get_dsr(dsr_src1, 14);

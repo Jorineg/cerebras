@@ -3,7 +3,6 @@ param h: i16;             // height of matrix to perform stencil on
 param tile_width: i16;   // width of each tile in x direction
 param tile_height: i16;   // height of each tile in y direction
 param radius: i16;          // radius of the stencil
-param num_iterations: i16;         // number of iterations to run the stencil
 
 // radius must be smaller or equal to the min(tile_width, tile_height)
 // acutal number of PEs is given by (w-2*radius)/tile_width+2 * (h-2*radius)/tile_height+2
@@ -61,7 +60,6 @@ layout {
 
       var basic_params = .{
         .memcpy_params = memcpy.get_params(col),
-        .num_iterations = num_iterations,
         .num_pe_x = num_pe_x,
         .num_pe_y = num_pe_y,
         .radius = radius,
@@ -128,6 +126,6 @@ layout {
   // export symbol names
   @export_name("values", *[tile_height+2*radius, tile_width+2*radius+1]f32, true);
   @export_name("weights", *[radius+1]f32, true);
-  @export_name("compute", fn()void);
+  @export_name("start", fn(num_iters: i32)void);
   @export_name("buffer", *[tile_height+2*radius, tile_width+2*radius+1]f32, true);
 }

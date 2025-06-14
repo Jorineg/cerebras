@@ -23,4 +23,5 @@ const send_north_task_id: local_task_id = @get_local_task_id(16);
 const send_south_task_id: local_task_id = @get_local_task_id(17);
 
 const loop_task_id: local_task_id = @get_local_task_id(18);
+const compute_task_id: local_task_id = @get_local_task_id(19);
 

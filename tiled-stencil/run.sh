@@ -27,14 +27,14 @@ if [ $REMAINDER_H -ne 0 ]; then
   HEIGHT=$((HEIGHT + PAD_H))
 fi
 
-NUM_PE_X=$((INNER_W / TILE_WIDTH + 2))
-NUM_PE_Y=$((INNER_H / TILE_HEIGHT + 2))
+NUM_PE_X=$(((WIDTH - 2 * RADIUS) / TILE_WIDTH + 2))
+NUM_PE_Y=$(((HEIGHT - 2 * RADIUS) / TILE_HEIGHT + 2))
 
 
 cslc layout.csl \
 --fabric-dims=$((NUM_PE_X+7)),$((NUM_PE_Y+2)) \
 --fabric-offsets=4,1 \
---params=w:$WIDTH,h:$HEIGHT,tile_width:$TILE_WIDTH,tile_height:$TILE_HEIGHT,radius:$RADIUS,num_iterations:$NUM_ITERATIONS \
+--params=w:$WIDTH,h:$HEIGHT,tile_width:$TILE_WIDTH,tile_height:$TILE_HEIGHT,radius:$RADIUS \
 --memcpy \
 --channels=1 \
 --arch=$ARCH \
@@ -44,9 +44,10 @@ if [ $? -ne 0 ]; then
   echo "cslc failed" >&2
   exit 1
 fi
-cs_python run.py --name out >> python.log
+cs_python run.py --name out --num-iterations $NUM_ITERATIONS >> python.log
 if [ $? -ne 0 ]; then
     echo "cerebras computation doesn't match python computation" >&2
+    exit 1
 else
     echo "Success!"
 fi
