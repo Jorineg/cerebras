@@ -1,11 +1,11 @@
 export SINGULARITYENV_SIMFABRIC_DEBUG=inst_trace
 
-WIDTH=14
-HEIGHT=14
-TILE_WIDTH=6
-TILE_HEIGHT=6
-RADIUS=1
-NUM_ITERATIONS=4
+WIDTH=9
+HEIGHT=9
+TILE_WIDTH=3
+TILE_HEIGHT=3
+RADIUS=3
+NUM_ITERATIONS=3
 ARCH="wse2"
 
 # increase width and height so they are multiples of tile_width and tile_height
@@ -38,6 +38,7 @@ cslc layout.csl \
 --memcpy \
 --channels=1 \
 --arch=$ARCH \
+--max-inlined-iterations=1000000 \
 --link-section-start-address-bytes=".own_values:20960,.buffer:40960" \
 -o out
 if [ $? -ne 0 ]; then

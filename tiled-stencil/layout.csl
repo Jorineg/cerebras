@@ -4,6 +4,8 @@ param tile_width: i16;   // width of each tile in x direction
 param tile_height: i16;   // height of each tile in y direction
 param radius: i16;          // radius of the stencil
 
+const do_not_wait_for_communication_flag = true;
+
 // radius must be smaller or equal to the min(tile_width, tile_height)
 // acutal number of PEs is given by (w-2*radius)/tile_width+2 * (h-2*radius)/tile_height+2
 // w-2*radius must be a multiple of tile_width and h-2*radius must be a multiple of tile_height
@@ -67,6 +69,7 @@ layout {
         .tile_height = tile_height,
         .row = row,
         .col = col,
+        .do_not_wait_for_communication_flag = do_not_wait_for_communication_flag,
       };
 
       var color_params = .{

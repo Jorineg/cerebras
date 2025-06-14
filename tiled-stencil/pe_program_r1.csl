@@ -18,20 +18,21 @@ param tile_height: i16;
 param radius: i16;
 param row: i16;
 param col: i16;
+
+param do_not_wait_for_communication_flag: bool;
 ///////////
 
 export const buffer_width = tile_width + 2*radius + 1; // last column is not used. only for memory alignment.
 export const buffer_height = tile_height + 2*radius;
 export const is_corner = (col == 0 or col == num_pe_x-1) and (row == 0 or row == num_pe_y-1);
 export const is_border = col<1 or row<1 or col>=num_pe_x-1 or row>=num_pe_y-1;
+const wait_for_communication = is_border or tile_height<4 or tile_width<4 or @is_arch("wse2") or !do_not_wait_for_communication_flag;
+const max_count: i16 = if (is_corner) 2 else if (is_border) 3 else 4;
 
-
-const consts = @import_module("consts.csl");
 
 // variables and pointers
 var receive_count: i16 = 0;
 var send_count: i16 = 0;
-const max_count: i16 = if (is_corner) 2 else if (is_border) 3 else 4;
 var iteration_count: i32 = 0;
 var num_iterations: i32 = 1;
 export var weights: [radius+1]f32;
@@ -47,6 +48,7 @@ var buffer_ptr = &buffer;
 
 
 // imports
+const consts = @import_module("consts.csl");
 const sys_mod = @import_module("<memcpy/memcpy>", memcpy_params);
 const config = @import_module("<tile_config>");
 const task_priority = config.task_priority;
@@ -83,22 +85,18 @@ task loop_task() void {
 
   load_communication_dsds_to_dsrs();
 
-  if (is_border) {
+  if (wait_for_communication) {
     @block(consts.compute_task_id);
   }
 
-  // copy own_values to buffer
-  // @fmovs(dsrs.buffer_center_dsr_dest_9, dsrs.own_values_dsr_src1_9);
-
-  // send cropped own_values to neighbors
   send_to_neighbors();
-
-  //receive data from all directions and store in buffer
   receive_from_neighbors();
 
-  if(!is_border) {
+  if(!wait_for_communication) {
     @activate(consts.compute_task_id);
   }
+
+  iteration_count += 1;
 }
 
 task compute_task() void {
@@ -132,7 +130,6 @@ task compute_task() void {
     // @fmacs(dsrs.buffer_center_dsr_dest_9, dsrs.own_values_dsr_src0_9, dsrs.buffer_center_dsr_src1_9, weights[0]);
   }
 
-  iteration_count += 1;
   @activate(consts.loop_task_id);
 }
 
@@ -222,7 +219,7 @@ fn load_communication_dsds_to_dsrs() void {
 
 
 fn load_other_dsds_to_dsrs() void {
-  if (is_border) {
+  if (wait_for_communication) {
     @load_to_dsr(dsrs.send_north_dsr_dest_5, dsds.send_north_dsd, .{ .async=true, .activate=send_north_task });
     @load_to_dsr(dsrs.send_south_dsr_dest_6, dsds.send_south_dsd, .{ .async=true, .activate=send_south_task });
     @load_to_dsr(dsrs.send_west_dsr_dest_7, dsds.send_west_dsd, .{ .async=true, .activate=send_west_task });
