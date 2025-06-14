@@ -5,7 +5,7 @@ HEIGHT=14
 TILE_WIDTH=6
 TILE_HEIGHT=6
 RADIUS=1
-NUM_ITERATIONS=4
+NUM_ITERATIONS=2
 ARCH="wse2"
 
 # increase width and height so they are multiples of tile_width and tile_height

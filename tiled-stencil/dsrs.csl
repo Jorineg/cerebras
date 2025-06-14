@@ -35,7 +35,7 @@ const own_values_dsr_src0_3 = @get_dsr(dsr_src0, 3);
 const own_values_dsr_src0_4 = @get_dsr(dsr_src0, 4);
 
 const own_values_dsr_src0_9 = @get_dsr(dsr_src0, 9);
-const own_values_dsr_src0_10 = @get_dsr(dsr_src0, 10);
+const buffer_center_dsr_src0_10 = @get_dsr(dsr_src0, 10);
 
 // src1 dsrs
 const shift_up_dsr_src1_1 = @get_dsr(dsr_src1, 1);
