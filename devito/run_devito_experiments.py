@@ -2,18 +2,18 @@ import numpy as np
 import time
 import os
 import sys
-from devito import Grid, TimeFunction, Eq, Operator, clear_cache, info
+import json
+import subprocess
 
 # --- Core Stencil Logic ---
 
 def execute_devito_benchmark(matrix, weights, iterations, platform='cpu'):
     """
-    Creates and runs a Devito operator for the star stencil, measuring
+    Creates and runs a Devito operator for the star stencil via subprocess, measuring
     steady-state performance.
 
-    This function implements the T(2N) - T(N) timing methodology.
-    It runs N iterations, then runs another N iterations, and returns the
-    time taken for the second set of N iterations.
+    This function uses subprocess to run the actual Devito computation with proper
+    environment variables set for the specified platform.
 
     Args:
         matrix (np.ndarray): The initial data grid.
@@ -24,70 +24,66 @@ def execute_devito_benchmark(matrix, weights, iterations, platform='cpu'):
     Returns:
         float: The steady-state runtime in seconds, or -1.0 on error.
     """
-    # Clear Devito's JIT cache to ensure fair compilation time for each run
-    clear_cache()
-
-    radius = len(weights) - 1
-    shape = matrix.shape
-    
     try:
-        # 1. Define the computational grid and TimeFunction
-        grid = Grid(shape=shape)
-        u = TimeFunction(name='u', grid=grid, space_order=radius, time_order=1)
-
-        # 2. Initialize the data
-        u.data[0, :, :] = matrix
-
-        # 3. Define the stencil equation symbolically
-        total_weight = sum(weights) + (len(weights) - 1) * 3 * weights[0] # Correction based on previous implementation
-        total_weight = weights[0] + 4 * sum(weights[1:]) # Correct total weight calculation
-
-        weighted_sum = weights[0] * u
-        for r in range(1, radius + 1):
-            # Devito uses x, y, z for dimensions. For 2D, they are x and y.
-            x, y = grid.dimensions
-            weighted_sum += weights[r] * u.subs({x: x - r}) # Left
-            weighted_sum += weights[r] * u.subs({x: x + r}) # Right
-            weighted_sum += weights[r] * u.subs({y: y - r}) # Up (in matrix terms)
-            weighted_sum += weights[r] * u.subs({y: y + r}) # Down (in matrix terms)
-
-        stencil_eq = Eq(u.forward, weighted_sum / total_weight)
-
-        # 4. Create the Operator with platform-specific settings
-        op_args = {'perf_level': 'advanced'}
+        # Prepare configuration for the subprocess
+        config = {
+            'width': matrix.shape[1],
+            'height': matrix.shape[0], 
+            'radius': len(weights) - 1,
+            'iterations': iterations
+        }
+        
+        # Prepare environment variables
+        env = os.environ.copy()
+        
         if platform == 'gpu':
-            op_args['platform'] = 'gpudev'
-            op_args['language'] = 'cuda'
+            env['DEVITO_PLATFORM'] = 'nvidiaX'
+            # With the NVIDIA HPC SDK now installed, we can use the recommended
+            # OpenACC backend with the nvc compiler.
+            env['DEVITO_LANGUAGE'] = 'openacc'
+            env['DEVITO_ARCH'] = 'nvc'
+            
+            # Prepend the NVIDIA HPC SDK compiler path to the PATH environment variable
+            # This ensures that the subprocess can find the `nvc++` compiler.
+            hpc_sdk_path = '/opt/nvidia/hpc_sdk/Linux_x86_64/25.5/compilers/bin'
+            if os.path.isdir(hpc_sdk_path):
+                env['PATH'] = f"{hpc_sdk_path}:{env.get('PATH', '')}"
+            
+        else:
+            # Remove GPU-specific variables for CPU runs
+            for var in ['DEVITO_PLATFORM', 'DEVITO_LANGUAGE', 'DEVITO_ARCH']:
+                env.pop(var, None)
         
-        op = Operator([stencil_eq], **op_args)
-
-        # 5. Execute the benchmark using the T(2N) - T(N) method
+        # Run the subprocess
+        result = subprocess.run(
+            [sys.executable, 'run_single_experiment.py', json.dumps(config)],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
         
-        # First run for N iterations to warm up everything (JIT, cache, data on GPU)
-        # We time this run to get T(N).
-        start_n1 = time.time()
-        # The `time_m` and `time_M` arguments run from timestep m to M-1.
-        op.apply(time_m=0, time_M=iterations, dt=1)
-        end_n1 = time.time()
-        time_n1 = end_n1 - start_n1
-
-        # Second run for the next N iterations. The operator resumes from the last state.
-        # This measures the steady-state performance.
-        start_n2 = time.time()
-        op.apply(time_m=iterations, time_M=2 * iterations, dt=1)
-        end_n2 = time.time()
-        time_n2 = end_n2 - start_n2
+        if result.returncode != 0:
+            print(f"Subprocess failed with return code {result.returncode}")
+            print(f"stderr: {result.stderr}")
+            print(f"stdout: {result.stdout}")
+            return -1.0
         
-        # The user's idea was T(2N_total) - T(N_total).
-        # T(2N_total) would be time_n1 + time_n2.
-        # So the calculation is (time_n1 + time_n2) - time_n1 = time_n2
-        # This confirms that timing the second block of iterations is the correct approach.
-        return time_n2
-
-    except Exception as e:
-        info(f"Execution failed on platform '{platform}': {e}")
+        # Parse the runtime from stdout
+        try:
+            runtime = float(result.stdout.strip())
+            return runtime
+        except ValueError:
+            print(f"Failed to parse runtime from output: '{result.stdout.strip()}'")
+            print(f"stderr: {result.stderr}")
+            return -1.0
+            
+    except subprocess.TimeoutExpired:
+        print(f"Subprocess timed out after 300 seconds")
         return -1.0
-
+    except Exception as e:
+        print(f"Execution failed on platform '{platform}': {e}")
+        return -1.0
 
 # --- Experiment Runner and Reporting ---
 
@@ -143,10 +139,10 @@ if __name__ == '__main__':
     try:
         import cupy
         gpu_available = True
-        info("CuPy found, GPU execution is available.")
+        print("CuPy found, GPU execution is available.")
     except ImportError:
         gpu_available = False
-        info("CuPy not found. Skipping GPU benchmarks. (Install with 'pip install cupy')")
+        print("CuPy not found. Skipping GPU benchmarks. (Install with 'pip install cupy')")
 
     for i, config in enumerate(experiments):
         print("-" * 50)
