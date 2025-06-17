@@ -13,3 +13,5 @@ debug
 */error_heatmap.png
 */out_wse2
 */out_wse3
+all.txt
+merge_files.py
