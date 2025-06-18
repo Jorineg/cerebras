@@ -28,6 +28,14 @@ This table shows the average cycles per iteration for different grid sizes, tile
 | 200x200 | 20x20 | 1 | 2672 | ERROR |
 | 200x200 | 20x20 | 2 | 4545 | 4571 |
 
+# maximale tile size
+
+| Grid Size | Tile Size | Radius | WSE2 Cycles/Iter | WSE3 Cycles/Iter |
+|-----------|-----------|--------|------------------|------------------|
+| 64x64 | 64x64 | 1 | 25270 | ERROR |
+| 64x64 | 64x64 | 2 | 42358 | 42238 |
+| 64x64 | 64x64 | 3 | 71647 | 71460 |
+
 **Notes:**
 - Cycles/Iter represents average cycles per iteration
 - ERROR indicates compilation failure or computation mismatch

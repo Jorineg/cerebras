@@ -17,8 +17,8 @@ export SINGULARITYENV_SIMFABRIC_DEBUG=inst_trace
 # Function to run benchmark for a specific architecture
 run_benchmark() {
     local ARCH=$1
-    local ITERATIONS_LOW=4
-    local ITERATIONS_HIGH=8
+    local ITERATIONS_LOW=1
+    local ITERATIONS_HIGH=2
     
     # Compile for this architecture
     NUM_PE_X=$(((WIDTH - 2 * RADIUS) / TILE_WIDTH + 2))
@@ -31,8 +31,8 @@ run_benchmark() {
     --memcpy \
     --channels=1 \
     --arch=$ARCH \
-    --link-section-start-address-bytes=".own_values:20960,.buffer:40960" \
     -o out_$ARCH > /dev/null 2>&1
+    # --link-section-start-address-bytes=".own_values:20960,.buffer:40960" \
     
     if [ $? -ne 0 ]; then
         echo -1

@@ -36,8 +36,8 @@ var send_count: i16 = 0;
 var iteration_count: i32 = 0;
 var num_iterations: i32 = 1;
 export var weights: [radius+1]f32;
-export var own_values: [buffer_height, buffer_width]f32 linksection(".own_values");
-export var buffer: [buffer_height, buffer_width]f32 linksection(".buffer");
+export var own_values: [buffer_height, buffer_width]f32;// linksection(".own_values");
+export var buffer: [buffer_height, buffer_width]f32;// linksection(".buffer");
 var div_weight: f32;
 
 

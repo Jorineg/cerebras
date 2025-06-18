@@ -1,11 +1,11 @@
 export SINGULARITYENV_SIMFABRIC_DEBUG=inst_trace
 
-WIDTH=9
-HEIGHT=9
-TILE_WIDTH=3
-TILE_HEIGHT=3
-RADIUS=3
-NUM_ITERATIONS=3
+WIDTH=330
+HEIGHT=330
+TILE_WIDTH=70
+TILE_HEIGHT=70
+RADIUS=1
+NUM_ITERATIONS=2
 ARCH="wse2"
 
 # increase width and height so they are multiples of tile_width and tile_height
@@ -39,8 +39,8 @@ cslc layout.csl \
 --channels=1 \
 --arch=$ARCH \
 --max-inlined-iterations=1000000 \
---link-section-start-address-bytes=".own_values:20960,.buffer:40960" \
 -o out
+# --link-section-start-address-bytes=".own_values:20960,.buffer:40960" \
 if [ $? -ne 0 ]; then
   echo "cslc failed" >&2
   exit 1
