@@ -28,13 +28,26 @@ This table shows the average cycles per iteration for different grid sizes, tile
 | 200x200 | 20x20 | 1 | 2672 | ERROR |
 | 200x200 | 20x20 | 2 | 4545 | 4571 |
 
-# maximale tile size
-
+# maximum tile size
 | Grid Size | Tile Size | Radius | WSE2 Cycles/Iter | WSE3 Cycles/Iter |
 |-----------|-----------|--------|------------------|------------------|
 | 64x64 | 64x64 | 1 | 25270 | ERROR |
 | 64x64 | 64x64 | 2 | 42358 | 42238 |
 | 64x64 | 64x64 | 3 | 71647 | 71460 |
+
+
+# "gpu-optimal" 1000x10000 grid with smallest possible tile size on cerebras
+| Grid Size | Tile Size | Radius | WSE2 Cycles/Iter | WSE3 Cycles/Iter |
+|-----------|-----------|--------|------------------|------------------|
+| 56x4 | 14x1 | 1 | 232 | 243 |
+| 44x8 | 11x2 | 1 | 279 | 283 |
+| 56x8 | 14x2 | 2 | 708 | 747 |
+| 44x8 | 11x2 | 2 | 607 | 644 |
+| 56x12 | 14x3 | 3 | 1118 | 1168 |
+| 44x12 | 11x3 | 3 | 1001 | 1054 |
+| 56x16 | 14x4 | 4 | 1806 | 1848 |
+| 44x16 | 11x4 | 4 | 1713 | 1756 |
+
 
 **Notes:**
 - Cycles/Iter represents average cycles per iteration
