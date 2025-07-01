@@ -4,6 +4,7 @@ import os
 import sys
 import json
 import subprocess
+import argparse
 
 # --- Core Stencil Logic ---
 
@@ -42,6 +43,15 @@ def execute_devito_benchmark(matrix, weights, iterations, platform='cpu'):
             # OpenACC backend with the nvc compiler.
             env['DEVITO_LANGUAGE'] = 'openacc'
             env['DEVITO_ARCH'] = 'nvc'
+            
+            # Additional CUDA environment variables for better initialization
+            env['CUDA_VISIBLE_DEVICES'] = '0'  # Use first GPU
+            env['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
+            env['CUDA_CACHE_DISABLE'] = '0'  # Enable caching
+            env['CUDA_LAUNCH_BLOCKING'] = '1'  # Synchronous kernel launches for debugging
+            
+            # Add CUDA library paths
+            env['LD_LIBRARY_PATH'] = f"/usr/local/cuda/lib64:{env.get('LD_LIBRARY_PATH', '')}"
             
             # Prepend the NVIDIA HPC SDK compiler path to the PATH environment variable
             # This ensures that the subprocess can find the `nvc++` compiler.
@@ -87,7 +97,7 @@ def execute_devito_benchmark(matrix, weights, iterations, platform='cpu'):
 
 # --- Experiment Runner and Reporting ---
 
-def parse_config(filename="experiments.config"):
+def parse_config(filename):
     """Parses the configuration file."""
     if not os.path.exists(filename):
         print(f"Error: Configuration file '{filename}' not found.")
@@ -132,7 +142,18 @@ def generate_markdown_report(results, filename="results.md"):
 # --- Main Execution Block ---
 
 if __name__ == '__main__':
-    experiments = parse_config()
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Run Devito stencil experiments')
+    parser.add_argument('config_file', help='Path to the experiment configuration file')
+    parser.add_argument('run_cpu', type=str, choices=['true', 'false'], 
+                       help='Whether to run CPU experiments (true/false)')
+    
+    args = parser.parse_args()
+    
+    # Convert string to boolean
+    run_cpu = args.run_cpu.lower() == 'true'
+    
+    experiments = parse_config(args.config_file)
     all_results = []
     
     # Check for GPU availability once
@@ -160,12 +181,16 @@ if __name__ == '__main__':
         initial_matrix = np.random.rand(*shape).astype(np.float32)
 
         # --- Run on CPU ---
-        print("\nRunning on CPU...")
-        cpu_runtime = execute_devito_benchmark(
-            initial_matrix.copy(), weights, iterations, platform='cpu'
-        )
-        if cpu_runtime >= 0:
-            print(f"CPU steady-state time for {iterations} iterations: {cpu_runtime:.4f} s")
+        cpu_runtime = -1.0  # Default to failed/skipped state
+        if run_cpu:
+            print("\nRunning on CPU...")
+            cpu_runtime = execute_devito_benchmark(
+                initial_matrix.copy(), weights, iterations, platform='cpu'
+            )
+            if cpu_runtime >= 0:
+                print(f"CPU steady-state time for {iterations} iterations: {cpu_runtime:.4f} s")
+        else:
+            print("\nSkipping CPU run (disabled by command line argument).")
 
         # --- Run on GPU ---
         gpu_runtime = -1.0 # Default to failed state
@@ -184,4 +209,7 @@ if __name__ == '__main__':
         all_results.append(result_entry)
 
     # --- Generate Final Report ---
-    generate_markdown_report(all_results)
+    # Use config filename (without extension) as part of results filename
+    config_basename = os.path.splitext(os.path.basename(args.config_file))[0]
+    results_filename = f"results_{config_basename}.md"
+    generate_markdown_report(all_results, results_filename)
