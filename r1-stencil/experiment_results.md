@@ -5,12 +5,19 @@ This table shows the average cycles per iteration for different grid sizes, tile
 | Grid Size | WSE2 Cycles/Iter | WSE3 Cycles/Iter |
 |-----------|------------------|------------------|
 | 3x3 | 12 | 17 |
-| 6x6 | 16 | 20 |
+| 4x4 | 15 | 21 |
+| 5x5 | 16 | 23 |
+| 6x6 | 16 | 23 |
+| 7x7 | 16 | 22 |
+| 8x8 | 16 | 24 |
+| 9x9 | 16 | 23 |
 | 10x10 | 16 | 23 |
-| 20x20 | 16 | 23 |
-| 50x50 | 16 | 23 |
+| 15x15 | 16 | 23 |
+| 20x20 | 15 | 23 |
+| 30x30 | 15 | 23 |
+| 50x50 | 15 | 23 |
 
 **Notes:**
 - Cycles/Iter represents average cycles per iteration
 - ERROR indicates compilation failure or computation mismatch
-- Generated on: Wed Jun 18 00:13:56 CEST 2025
+- Generated on: Mon Jun 30 19:11:17 CEST 2025

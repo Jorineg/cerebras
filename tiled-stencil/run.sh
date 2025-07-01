@@ -1,12 +1,12 @@
 export SINGULARITYENV_SIMFABRIC_DEBUG=inst_trace
 
-WIDTH=100
-HEIGHT=100
-TILE_WIDTH=20
-TILE_HEIGHT=20
+WIDTH=3
+HEIGHT=3
+TILE_WIDTH=1
+TILE_HEIGHT=1
 RADIUS=1
-NUM_ITERATIONS=2
-ARCH="wse3"
+NUM_ITERATIONS=10
+ARCH="wse2"
 
 # increase width and height so they are multiples of tile_width and tile_height
 INNER_W=$((WIDTH - 2 * RADIUS))

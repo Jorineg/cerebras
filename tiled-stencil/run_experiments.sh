@@ -16,8 +16,18 @@ fi
 # Make benchmark script executable
 chmod +x benchmark_single.sh
 
-# Initialize results
-results=()
+# Get config file name without path and extension
+CONFIG_NAME=$(basename "$CONFIG_FILE" .config)
+
+# Initialize markdown file
+cat > "${CONFIG_NAME}_results.md" << EOF
+# Stencil Computation Benchmark Results for ${CONFIG_NAME}
+
+This table shows the average cycles per iteration for different grid sizes, tile sizes, and radius values on WSE2 and WSE3 architectures.
+
+| Grid Size | Tile Size | Radius | WSE2 Cycles/Iter | WSE3 Cycles/Iter |
+|-----------|-----------|--------|------------------|------------------|
+EOF
 
 echo "Running experiments..."
 echo
@@ -47,32 +57,6 @@ while IFS= read -r line || [ -n "$line" ]; do
     # Parse results
     IFS=' ' read -r wse2_cycles wse3_cycles <<< "$benchmark_result"
     
-    # Store results
-    results+=("$width|$height|$tile_width|$tile_height|$radius|$wse2_cycles|$wse3_cycles")
-    
-    echo "  WSE2: $wse2_cycles cycles/iter, WSE3: $wse3_cycles cycles/iter"
-    echo
-done < "$CONFIG_FILE"
-
-# Generate markdown table
-echo "Generating results table..."
-echo
-
-# Create markdown file
-cat > experiment_results.md << 'EOF'
-# Stencil Computation Benchmark Results
-
-This table shows the average cycles per iteration for different grid sizes, tile sizes, and radius values on WSE2 and WSE3 architectures.
-
-EOF
-
-echo "| Grid Size | Tile Size | Radius | WSE2 Cycles/Iter | WSE3 Cycles/Iter |" >> experiment_results.md
-echo "|-----------|-----------|--------|------------------|------------------|" >> experiment_results.md
-
-# Add results to table
-for result in "${results[@]}"; do
-    IFS='|' read -r width height tile_width tile_height radius wse2_cycles wse3_cycles <<< "$result"
-    
     # Format cycle counts (show -1 as "ERROR")
     if [ "$wse2_cycles" = "-1" ]; then
         wse2_display="ERROR"
@@ -86,16 +70,23 @@ for result in "${results[@]}"; do
         wse3_display="$wse3_cycles"
     fi
     
-    echo "| ${width}x${height} | ${tile_width}x${tile_height} | $radius | $wse2_display | $wse3_display |" >> experiment_results.md
-done
+    # Append result to markdown file immediately
+    echo "| ${width}x${height} | ${tile_width}x${tile_height} | $radius | $wse2_display | $wse3_display |" >> "${CONFIG_NAME}_results.md"
+    
+    echo "  WSE2: $wse2_cycles cycles/iter, WSE3: $wse3_cycles cycles/iter"
+    echo
+done < "$CONFIG_FILE"
 
-echo "" >> experiment_results.md
-echo "**Notes:**" >> experiment_results.md
-echo "- Cycles/Iter represents average cycles per iteration" >> experiment_results.md
-echo "- ERROR indicates compilation failure or computation mismatch" >> experiment_results.md
-echo "- Generated on: $(date)" >> experiment_results.md
+# Add notes at the end
+cat >> "${CONFIG_NAME}_results.md" << EOF
 
-echo "Results saved to experiment_results.md"
+**Notes:**
+- Cycles/Iter represents average cycles per iteration
+- ERROR indicates compilation failure or computation mismatch
+- Generated on: $(date)
+EOF
+
+echo "Results saved to ${CONFIG_NAME}_results.md"
 echo
 echo "=== Results Preview ==="
-cat experiment_results.md 
+cat "${CONFIG_NAME}_results.md"

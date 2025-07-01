@@ -28,7 +28,7 @@ export const is_corner = (col == 0 or col == num_pe_x-1) and (row == 0 or row ==
 export const is_border = col<1 or row<1 or col>=num_pe_x-1 or row>=num_pe_y-1;
 const wait_for_communication = is_border or tile_height<4 or tile_width<4 or @is_arch("wse2") or !do_not_wait_for_communication_flag;
 const max_count: i16 = if (is_corner) 2 else if (is_border) 3 else 4;
-const ut0 = @get_ut_id(0);
+const ut0 = if (@is_arch("wse3")) @get_ut_id(0) else 0;
 
 
 // variables and pointers
@@ -224,7 +224,11 @@ fn load_other_dsds_to_dsrs() void {
     @load_to_dsr(dsrs.send_north_dsr_dest_5, dsds.send_north_dsd, .{ .async=true, .activate=send_north_task });
     @load_to_dsr(dsrs.send_south_dsr_dest_6, dsds.send_south_dsd, .{ .async=true, .activate=send_south_task });
     @load_to_dsr(dsrs.send_west_dsr_dest_7, dsds.send_west_dsd, .{ .async=true, .activate=send_west_task });
-    @load_to_dsr(dsrs.send_east_dsr_dest_8, dsds.send_east_dsd, .{ .async=true, .activate=send_east_task, .ut_id=ut0 });
+    if (@is_arch("wse3")) {
+      @load_to_dsr(dsrs.send_east_dsr_dest_8, dsds.send_east_dsd, .{ .async=true, .activate=send_east_task, .ut_id=ut0 });
+    } else {
+      @load_to_dsr(dsrs.send_east_dsr_dest_8, dsds.send_east_dsd, .{ .async=true, .activate=send_east_task });
+    }
 
     @load_to_dsr(dsrs.recv_north_dsr_src1_11, dsds.recv_north_dsd, .{ .async=true, .activate=receive_north_task });
     @load_to_dsr(dsrs.recv_south_dsr_src1_12, dsds.recv_south_dsd, .{ .async=true, .activate=receive_south_task });
@@ -234,7 +238,11 @@ fn load_other_dsds_to_dsrs() void {
     @load_to_dsr(dsrs.send_north_dsr_dest_5, dsds.send_north_dsd, .{ .async=true });
     @load_to_dsr(dsrs.send_south_dsr_dest_6, dsds.send_south_dsd, .{ .async=true });
     @load_to_dsr(dsrs.send_west_dsr_dest_7, dsds.send_west_dsd, .{ .async=true });
-    @load_to_dsr(dsrs.send_east_dsr_dest_8, dsds.send_east_dsd, .{ .async=true, .ut_id=ut0 });
+    if (@is_arch("wse3")) {
+      @load_to_dsr(dsrs.send_east_dsr_dest_8, dsds.send_east_dsd, .{ .async=true, .ut_id=ut0 });
+    } else {
+      @load_to_dsr(dsrs.send_east_dsr_dest_8, dsds.send_east_dsd, .{ .async=true });
+    }
     @load_to_dsr(dsrs.recv_north_dsr_src1_11, dsds.recv_north_dsd, .{ .async=true });
     @load_to_dsr(dsrs.recv_south_dsr_src1_12, dsds.recv_south_dsd, .{ .async=true });
     @load_to_dsr(dsrs.recv_west_dsr_src1_13, dsds.recv_west_dsd, .{ .async=true });

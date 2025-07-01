@@ -14,8 +14,8 @@ export SINGULARITYENV_SIMFABRIC_DEBUG=inst_trace
 # Function to run benchmark for a specific architecture
 run_benchmark() {
     local ARCH=$1
-    local ITERATIONS_LOW=4
-    local ITERATIONS_HIGH=8
+    local ITERATIONS_LOW=2
+    local ITERATIONS_HIGH=4
     
     # Compile for this architecture
     
