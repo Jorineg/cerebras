@@ -12,8 +12,12 @@ This table shows the average cycles per iteration for different grid sizes, tile
 | 44x12 | 11x3 | 3 | 1001 | 1054 |
 | 56x16 | 14x4 | 4 | 1803 | 1848 |
 | 44x16 | 11x4 | 4 | 1714 | 1756 |
+| 56x20 | 14x5 | 5 | 2594 | 2634 |
+| 44x20 | 11x5 | 5 | 2195 | 2232 |
+| 56x24 | 14x6 | 6 | 3619 | 3653 |
+| 44x24 | 11x6 | 6 | 3370 | 3379 |
 
 **Notes:**
 - Cycles/Iter represents average cycles per iteration
 - ERROR indicates compilation failure or computation mismatch
-- Generated on: Mon Jun 30 19:32:02 CEST 2025
+- Generated on: Tue Jul  1 20:11:53 CEST 2025

@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # Check if correct number of arguments provided
-if [ $# -ne 5 ]; then
-    echo "Usage: $0 <width> <height> <tile_width> <tile_height> <radius>"
+if [ $# -lt 5 ] || [ $# -gt 6 ]; then
+    echo "Usage: $0 <width> <height> <tile_width> <tile_height> <radius> [architecture]"
+    echo "  architecture: wse2, wse3, or both (default: both)"
     exit 1
 fi
 
@@ -11,6 +12,13 @@ HEIGHT=$2
 TILE_WIDTH=$3
 TILE_HEIGHT=$4
 RADIUS=$5
+ARCH_ARG=${6:-"both"}
+
+# Validate architecture argument
+if [[ "$ARCH_ARG" != "wse2" && "$ARCH_ARG" != "wse3" && "$ARCH_ARG" != "both" ]]; then
+    echo "Error: Invalid architecture '$ARCH_ARG'. Must be 'wse2', 'wse3', or 'both'."
+    exit 1
+fi
 
 export SINGULARITYENV_SIMFABRIC_DEBUG=inst_trace
 
@@ -99,12 +107,33 @@ if [ $REMAINDER_H -ne 0 ]; then
     HEIGHT=$((HEIGHT + PAD_H))
 fi
 
-# Run benchmarks for both architectures
-wse2_cycles=$(run_benchmark "wse2")
-wse3_cycles=$(run_benchmark "wse3")
-
-# Output results
-echo "$wse2_cycles $wse3_cycles"
-
-# Cleanup
-rm -f out_wse2* out_wse3* python.log 2>/dev/null 
+# Run benchmarks based on architecture argument
+if [[ "$ARCH_ARG" == "both" ]]; then
+    # Run benchmarks for both architectures
+    wse2_cycles=$(run_benchmark "wse2")
+    wse3_cycles=$(run_benchmark "wse3")
+    
+    # Output results
+    echo "$wse2_cycles $wse3_cycles"
+    
+    # Cleanup
+    rm -f out_wse2* out_wse3* python.log 2>/dev/null
+elif [[ "$ARCH_ARG" == "wse2" ]]; then
+    # Run benchmark for WSE2 only
+    wse2_cycles=$(run_benchmark "wse2")
+    
+    # Output result
+    echo "$wse2_cycles"
+    
+    # Cleanup
+    rm -f out_wse2* python.log 2>/dev/null
+else # wse3
+    # Run benchmark for WSE3 only
+    wse3_cycles=$(run_benchmark "wse3")
+    
+    # Output result
+    echo "$wse3_cycles"
+    
+    # Cleanup
+    rm -f out_wse3* python.log 2>/dev/null
+fi 
