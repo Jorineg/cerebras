@@ -53,8 +53,8 @@ This table shows the average cycles per iteration for different grid sizes, tile
 | 192x192 | 60x60 | 6 | 111297 |
 | 192x192 | 64x64 | 1 | 16924 |
 | 194x194 | 64x64 | 2 | 42228 |
-| 198x198 | 64x60 | 4 | 87196 |
-| 202x202 | 64x60 | 6 | ERROR |
+| 198x198 | 64x64 | 4 | 92532 |
+| 202x202 | 64x64 | 6 | ERROR |
 
 **Notes:**
 - Cycles/Iter represents average cycles per iteration
